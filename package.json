@@ -51,6 +51,7 @@
 		"drizzle-orm": "^0.40.1",
 		"postgres": "^3.4.7",
 		"zod": "^4.0.17"
+		"@iconify/svelte": "^5.0.1",
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [

@@ -8,4 +8,19 @@
 	"login_adminPassword": "Admin Password",
 	"login_button": "Login",
 	"login_loginUser": "Login for User"
+	"home": "Home",
+	"username": "username",
+	"doucument_send": "Document Submitted",
+	"doucument_wait": "Pending Review",
+	"doucument_process": "Under Review",
+	"doucument_success": "Completed",
+	"doucument_reject": "Document Rejected",
+	"doucument_notfound": "Doucument Not Found",
+	"doucument_number": "Doucument ID",
+	"doucument_name": "ProjectName",
+	"placeholder_search": "Please Enter ProjectName",
+	"decline": "Decline",
+	"search_document": "Check Document Status",
+	"status": "Status",
+	"track": "Tracking"
 }

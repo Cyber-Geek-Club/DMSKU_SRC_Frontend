@@ -8,4 +8,19 @@
 	"login_adminPassword": "รหัสผ่านผู้ดูแลระบบ",
 	"login_loginUser": "เข้าสู่ระบบสำหรับผู้ใช้",
 	"login_button": "เข้าสู่ระบบ"
+	"home": "หน้าหลัก",
+	"username": "ชื่อสมาชิก",
+	"doucument_send": "ส่งเอกสารเข้าระบบแล้ว",
+	"doucument_wait": "รอตรวจสอบ",
+	"doucument_process": "อยู่ระหว่างตรวจสอบ",
+	"doucument_success": "เสร็จสมบูรณ์",
+	"doucument_reject": "เอกสารถูกปฏิเสธ",
+	"doucument_notfound": "ไม่พบข้อมูลเอกสาร",
+	"doucument_number": "หมายเลขเอกสาร",
+	"doucument_name": "ชื่อโครงการ",
+	"placeholder_search": "ค้นหาชื่อโครงการ",
+	"decline": "ปฏิเสธ",
+	"search_document": "ตรวจสอบสถานะเอกสาร",
+	"status": "สถานะ",
+	"track": "ติดตาม"
 }
