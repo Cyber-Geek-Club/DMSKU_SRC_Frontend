@@ -23,7 +23,7 @@
 		{#if page.url.pathname !== '/' && page.url.pathname !== '/admin/login_form' && page.url.pathname !== '/searchDocument'}
 			<Navbar />
 		{/if}
-		<main class="h-full">
+		<main class="flex-1">
 			{@render children?.()}
 		</main>
 	</div>
