@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@iconify/svelte':
         specifier: ^5.0.1
-        version: 5.0.1(svelte@5.37.2)
+        version: 5.0.1(svelte@5.38.2)
       '@inlang/paraglide-js':
         specifier: ^2.2.0
         version: 2.2.0
@@ -2440,10 +2440,10 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@iconify/svelte@5.0.1(svelte@5.37.2)':
+  '@iconify/svelte@5.0.1(svelte@5.38.2)':
     dependencies:
       '@iconify/types': 2.0.0
-      svelte: 5.37.2
+      svelte: 5.38.2
 
   '@iconify/types@2.0.0': {}
 

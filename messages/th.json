@@ -7,7 +7,7 @@
 	"login_adminUsername": "ชื่อผู้ใช้ผู้ดูแลระบบ",
 	"login_adminPassword": "รหัสผ่านผู้ดูแลระบบ",
 	"login_loginUser": "เข้าสู่ระบบสำหรับผู้ใช้",
-	"login_button": "เข้าสู่ระบบ"
+	"login_button": "เข้าสู่ระบบ",
 	"home": "หน้าหลัก",
 	"username": "ชื่อสมาชิก",
 	"doucument_send": "ส่งเอกสารเข้าระบบแล้ว",
