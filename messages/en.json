@@ -1,6 +1,13 @@
 {
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"hello_world": "Hello, {name} from en!",
+	"login_button_checkStatus": "Check Document Status",
+	"login_button_login": "Login with Google @ku.th",
+	"login_loginAdmin": "Login for Admin",
+	"login_adminUsername": "Admin Username",
+	"login_adminPassword": "Admin Password",
+	"login_button": "Login",
+	"login_loginUser": "Login for User"
 	"home": "Home",
 	"username": "username",
 	"doucument_send": "Document Submitted",

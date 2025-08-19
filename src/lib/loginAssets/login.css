@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+.login-container {
+	@apply h-screen w-screen;
+}
+
+.login-background {
+	@apply absolute -z-50 flex h-full w-full flex-col justify-between overflow-hidden;
+}
+
+.login-content {
+	@apply flex h-full w-full flex-col items-center justify-center gap-4;
+}
+
+.button-container {
+	@apply flex w-full max-w-md flex-col items-center justify-center gap-4;
+}
+
+.button-container a {
+	@apply cursor-pointer text-sm hover:underline;
+}
+
+.login-button {
+	@apply h-14 w-full cursor-pointer rounded-2xl border transition-transform duration-200 ease-in-out hover:scale-105 active:scale-100;
+}
+
+.input-container {
+	@apply relative flex w-full max-w-md flex-col gap-4;
+}
+
+.input-container p {
+	@apply text-center text-2xl font-bold;
+}
+.input-container a {
+	@apply cursor-pointer text-center text-sm hover:underline;
+}
+
+.input-field {
+	@apply w-full rounded-2xl border bg-white p-4 text-sm text-black transition-transform duration-200 ease-in-out focus:outline-none;
+}
+
+.eye-icon {
+	@apply absolute top-1/2 right-4 -translate-y-1/2 cursor-pointer;
+}
