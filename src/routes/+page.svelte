@@ -6,6 +6,7 @@
 	import GoogleIcon from '$lib/loginAssets/GoogleIcon.svelte';
 	import { m } from '$lib/paraglide/messages.js';
 	import { auth } from '$lib/api/auth';
+	import { goto } from '$app/navigation';
 </script>
 
 <main class="login-container">
@@ -15,7 +16,7 @@
 		<div class="button-container">
 			<Button
 				className="bg-ku-dark-green text-white border-ku-dark-green"
-				onclick={() => auth.getMe()}
+				onclick={() => goto('/searchDocument')}
 			>
 				{m.login_button_checkStatus()}
 			</Button>
