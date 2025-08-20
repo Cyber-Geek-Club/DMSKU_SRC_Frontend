@@ -15,7 +15,7 @@
 	];
 </script>
 
-<div class="min-h-screen md:flex">
+<div class="md:flex">
 	{#if page.url.pathname !== '/' && page.url.pathname !== '/admin/login_form' && page.url.pathname !== '/searchDocument'}
 		<Sidebar {items} />
 	{/if}

@@ -3,15 +3,14 @@
 </script>
 
 <aside
-  class="fixed md:static inset-y-0 left-0 w-72 bg-[#FDFAF6] text-[#2f2f2f] shadow-lg
-         transition-transform duration-200 -translate-x-full md:translate-x-0"
-  aria-label="Sidebar navigation"
+  class="sticky h-screen left-0 top-0 w-72 bg-[#FDFAF6] text-[#2f2f2f] shadow-lg"
+  aria-label="Sidebar navigation" 
 >
   <div class="flex items-center justify-center px-4 my-10 text-lg font-bold">
     KMSKU
   </div>
 
-  <nav class="p-2 space-y-1 overflow-y-auto h-[calc(100vh-4rem)]">
+  <nav class="p-2 space-y-1 overflow-y-auto">
     {#each items as item}
       <a
         href={item.href}
@@ -20,6 +19,7 @@
       >
         {#if item.icon}
           <svelte:component this={item.icon} size={20} />
+
         {/if}
         <span>{item.label}</span>
       </a>
