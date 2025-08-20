@@ -1,0 +1,131 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+/* Wrapper */
+.container-List {
+	@apply mt-10 flex flex-col;
+}
+
+/* Filter bar */
+.filter-bar {
+	@apply ml-35 flex h-8 w-full max-w-[80%] flex-row items-center justify-between px-2.5;
+}
+.tabs {
+	@apply flex items-center gap-12;
+}
+.tab-item {
+	@apply relative cursor-pointer py-1 text-[16px] text-gray-600 hover:text-gray-900;
+}
+.tab-item.active {
+	@apply border-b-4 border-teal-700 font-medium text-gray-900;
+}
+.add-button {
+	@apply inline-flex items-center gap-2 rounded-full bg-[#006664] px-4 py-2 text-sm text-white shadow-sm hover:bg-[#005b5b] focus:ring-2 focus:ring-[#005b5b] focus:outline-none;
+}
+.icon-add.file {
+	@apply h-5 w-5;
+}
+
+/* List container */
+.project-list {
+	@apply mt-10 ml-35 w-full max-w-[80%] rounded-[20px] border border-[#d9d9d9] bg-[#FDFAF6] pb-4 shadow;
+	max-height: 480px; 
+	overflow-y: auto; 
+}
+
+.no-scrollbar {
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE 10+ */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;                   /* Chrome, Safari */
+}
+
+/* Header row */
+.header {
+	@apply grid grid-cols-[1fr_3fr_2fr_2fr_120px]  rounded-tl-[20px] rounded-tr-[20px] bg-[#006664] text-sm font-medium text-white;
+	@apply px-4 py-2;
+	flex-shrink: 0;
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+.col_list{
+	@apply pl-4
+}
+
+/* Body rows */
+.project-items {
+	@apply divide-y divide-[#d9d9d9];
+}
+.project-item {
+	@apply grid grid-cols-[1fr_3fr_2fr_2fr_120px] items-center bg-[#FDFAF6] px-8 py-2;
+}
+.project-item:hover {
+	@apply bg-gray-100;
+}
+
+.col {
+	@apply flex items-center;
+}
+.col .id {
+	@apply text-gray-700;
+}
+.col .name {
+	@apply text-gray-800;
+}
+.col .date {
+	@apply text-gray-700;
+}
+
+.actions {
+	@apply flex items-center justify-center gap-5;
+}
+.action-btn {
+	@apply p-1 text-gray-700 hover:text-teal-700;
+}
+
+.status-pill {
+	@apply inline-flex items-center gap-2 rounded-full px-4 py-1 text-sm text-white;
+}
+.status-dot {
+	@apply h-2 w-2 rounded-full;
+}
+
+.status-ok {
+	@apply bg-teal-500/70;
+}
+.status-ok-dot {
+	@apply bg-teal-700;
+}
+.status-pending {
+	@apply bg-amber-300 text-amber-900;
+}
+.status-pending-dot {
+	@apply bg-amber-600;
+}
+.status-bad {
+	@apply bg-rose-400;
+}
+.status-bad-dot {
+	@apply bg-rose-700;
+}
+
+.empty-state {
+	min-height: 320px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	color: #6b7280;
+	text-align: center;
+}
+.empty-icon {
+	opacity: 0.75;
+}
+.empty-text {
+	font-size: 1.1rem;
+	color: #6b7280;
+}

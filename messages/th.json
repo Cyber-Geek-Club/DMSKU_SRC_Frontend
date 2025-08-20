@@ -21,6 +21,20 @@
 	"placeholder_search": "ค้นหาชื่อโครงการ",
 	"decline": "ปฏิเสธ",
 	"search_document": "ตรวจสอบสถานะเอกสาร",
+	"search_project": "ค้นหาเอกสาร",
 	"status": "สถานะ",
-	"track": "ติดตาม"
+	"track": "ติดตาม",
+	"add_project": "เพิ่มโครงการ",
+	"filter_status_all": "ทั้งหมด",
+	"filter_status_confirmed": "ยืนยัน",
+	"filter_status_pending": "รอดำเนินการ",
+	"filter_status_rejected": "ปฏิเสธ",
+	"header_id": "ID",
+	"header_name": "ชื่อโครงการ",
+	"header_status": "สถานะ",
+	"header_date": "วันที่",
+	"not_found_project": "ชมรมของคุณยังไม่มีโครงการ",
+	"not_found_projects_confirmed": "ยังไม่มีโครงการที่ยืนยัน",
+	"not_found_projects_pending": "ยังไม่มีโครงการที่รอดำเนินการ",
+	"not_found_projects_rejected": "ยังไม่มีโครงการที่ถูกปฏิเสธ"
 }

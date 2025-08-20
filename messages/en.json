@@ -21,6 +21,20 @@
 	"placeholder_search": "Please Enter ProjectName",
 	"decline": "Decline",
 	"search_document": "Check Document Status",
+	"search_project": "Search Project",
 	"status": "Status",
-	"track": "Tracking"
+	"track": "Tracking",
+	"add_project": "Add Project",
+	"filter_status_all": "All",
+	"filter_status_confirmed": "Confirmed",
+	"filter_status_pending": "Pending",
+	"filter_status_rejected": "Rejected",
+	"header_id": "ID",
+	"header_name": "Project Name",
+	"header_status": "Status",
+	"header_date": "Date",
+	"not_found_project": "Your club has no projects",
+	"not_found_projects_confirmed": "No confirmed projects",
+	"not_found_projects_pending": "No pending projects",
+	"not_found_projects_rejected": "No rejected projects"
 }
