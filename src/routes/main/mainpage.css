@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+.main-container {
+    @apply w-full h-full bg-[#d9d9d9] ;
+}
