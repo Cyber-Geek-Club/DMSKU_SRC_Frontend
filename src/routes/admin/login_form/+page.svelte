@@ -5,9 +5,23 @@
 	import Input from '$lib/loginAssets/Input.svelte';
 	import LOGO from '$lib/assets/logo.png';
 	import { m } from '$lib/paraglide/messages.js';
+	import { auth } from '$lib/api/auth';
+	import { goto } from '$app/navigation';
 
 	let username = $state('');
 	let password = $state('');
+
+	const handleLogin = async () => {
+		if (!username || !password) {
+			alert(m.login_fail_to_login());
+			return;
+		}
+
+		const res = await auth.loginAsAdmin(username, password);
+		if (res.status === 200) {
+			goto('/admin/dashboard');
+		}
+	};
 </script>
 
 <main class="login-container">
@@ -34,7 +48,7 @@
 					className=" text-white border-ku-dark-green"
 				/>
 			</div>
-			<Button className="bg-ku-dark-green text-white border-ku-dark-green">
+			<Button className="bg-ku-dark-green text-white border-ku-dark-green" onclick={() => {}}>
 				{m.login_button()}
 			</Button>
 			<a href="/">

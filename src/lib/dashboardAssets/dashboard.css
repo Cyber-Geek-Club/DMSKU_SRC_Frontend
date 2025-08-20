@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+.title {
+	@apply my-8 text-center text-4xl font-bold;
+}
+
+.dashboard-container {
+	@apply grid grid-cols-1 gap-10 p-10 md:grid-cols-2 lg:grid-cols-3;
+}
+
+.block {
+	@apply flex h-80 w-full flex-col items-center justify-center rounded-2xl bg-[#D9D9D9] px-10 pt-20 text-2xl font-bold shadow-lg;
+}
+
+.block-title {
+	@apply mt-4 text-center text-2xl font-semibold;
+}
+
+.block-content {
+	@apply flex h-full w-full items-center justify-evenly text-lg font-semibold;
+}
+
+.block-subtext {
+	@apply text-center text-4xl;
+}
