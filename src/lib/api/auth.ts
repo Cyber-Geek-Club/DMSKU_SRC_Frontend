@@ -12,5 +12,9 @@ export const auth = {
 
 	getMe: () => {
 		return http.get('/auth/me');
+	},
+
+	loginAsAdmin: (username: string, password: string) => {
+		return http.post('/auth/login/admin', { email: username, password: password });
 	}
 };
