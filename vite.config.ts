@@ -15,13 +15,13 @@ export default defineConfig({
 			project: './project.inlang',
 			outdir: './src/lib/paraglide'
 		})
-	],
-	server: {
-		https: {
-			key: fs.readFileSync(path.resolve('./src/certificates/localhost-key.pem')),
-			cert: fs.readFileSync(path.resolve('./src/certificates/localhost.pem'))
-		},
-		host: 'localhost',
-		port: 5173
-	}
+	]
+	// server: {
+	// 	https: {
+	// 		key: fs.readFileSync(path.resolve('./src/certificates/localhost-key.pem')),
+	// 		cert: fs.readFileSync(path.resolve('./src/certificates/localhost.pem'))
+	// 	},
+	// 	host: 'localhost',
+	// 	port: 5173
+	// }
 });
