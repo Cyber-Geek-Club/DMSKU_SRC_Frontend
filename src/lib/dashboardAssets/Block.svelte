@@ -1,7 +1,7 @@
 <script lang="ts">
 	import './dashboard.css';
 	import { m } from '$lib/paraglide/messages.js';
-	let { title = '', subText = '', icon, iconProps = { size: 50 } } = $props();
+	let { title = '', subText = 0, icon, iconProps = { size: 50 } } = $props();
 </script>
 
 <div class="block">

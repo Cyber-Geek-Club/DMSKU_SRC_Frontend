@@ -3,6 +3,8 @@ import devtoolsJson from 'vite-plugin-devtools-json';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
+import fs from 'fs';
+import path from 'path';
 
 export default defineConfig({
 	plugins: [
@@ -13,5 +15,13 @@ export default defineConfig({
 			project: './project.inlang',
 			outdir: './src/lib/paraglide'
 		})
-	]
+	],
+	server: {
+		https: {
+			key: fs.readFileSync(path.resolve('./src/certificates/localhost-key.pem')),
+			cert: fs.readFileSync(path.resolve('./src/certificates/localhost.pem'))
+		},
+		host: 'localhost',
+		port: 5173
+	}
 });

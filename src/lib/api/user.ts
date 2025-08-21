@@ -16,5 +16,9 @@ export const user = {
 
 	getUserData: (email: string) => {
 		return http.get('/user', { params: { email } });
+	},
+
+	getCountOfUsers: () => {
+		return http.get('/user/count');
 	}
 };

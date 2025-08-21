@@ -48,7 +48,12 @@
 					className=" text-white border-ku-dark-green"
 				/>
 			</div>
-			<Button className="bg-ku-dark-green text-white border-ku-dark-green" onclick={() => {}}>
+			<Button
+				className="bg-ku-dark-green text-white border-ku-dark-green"
+				onclick={() => {
+					handleLogin();
+				}}
+			>
 				{m.login_button()}
 			</Button>
 			<a href="/">

@@ -15,6 +15,6 @@ export const auth = {
 	},
 
 	loginAsAdmin: (username: string, password: string) => {
-		return http.post('/auth/login/admin', { username, password });
+		return http.post('/auth/login/admin', { email: username, password: password });
 	}
 };
