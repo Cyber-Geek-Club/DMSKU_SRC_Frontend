@@ -1,0 +1,90 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+@import '../../app.css';
+
+.upload-container {
+	@apply h-full w-full bg-[#d9d9d9];
+}
+
+.upload-header {
+	@apply flex items-center pt-10 pl-10 text-2xl font-bold text-gray-800;
+}
+
+.upload-content {
+	@apply mx-auto flex w-11/12 flex-col gap-10 md:flex-row;
+}
+
+.input-container {
+	@apply mt-2 flex flex-col gap-2;
+}
+
+.upload-list {
+	@apply mx-auto mt-8 h-fit min-h-2/5 w-11/12 rounded-2xl bg-[#FDFAF6] shadow-2xl;
+}
+.upload-page-header {
+	@apply flex w-full items-center justify-center rounded-t-2xl bg-ku-dark-green py-5 text-center text-lg font-bold text-white;
+}
+
+.list-content {
+	@apply flex h-full flex-col gap-4 p-4;
+}
+
+.upload-button {
+	@apply mt-4 mb-10 w-1/3 cursor-pointer items-center self-center rounded-2xl bg-ku-dark-green py-2 text-center text-white transition-all duration-200 ease-in-out hover:scale-105 active:scale-100;
+}
+
+input {
+	@apply w-full rounded-2xl md:w-[calc(100vw*(1/5))];
+}
+
+.preview-overlay {
+	@apply fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4;
+}
+.preview-modal {
+	@apply max-h-full w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl;
+}
+.preview-modal-header {
+	@apply flex items-center justify-between border-b px-4 py-2;
+}
+.preview-modal-title {
+	@apply truncate text-sm font-semibold;
+}
+.preview-close-btn {
+	@apply rounded px-2 py-1 text-sm hover:bg-gray-100;
+}
+.preview-modal-body {
+	@apply overflow-auto p-4;
+}
+.preview-modal-footer {
+	@apply flex justify-end gap-2 border-t px-4 py-2;
+}
+.preview-download-btn {
+	@apply rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700;
+}
+.preview-cancel-btn {
+	@apply rounded bg-gray-200 px-3 py-1 text-xs font-medium hover:bg-gray-300;
+}
+.preview-image {
+	@apply mx-auto max-h-[70vh] object-contain;
+}
+.preview-iframe {
+	@apply h-[70vh] w-full;
+}
+.preview-trigger-btn {
+	@apply rounded p-1 text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-30;
+}
+
+.preview-modal-body::-webkit-scrollbar {
+	width: 8px;
+}
+.preview-modal-body::-webkit-scrollbar-track {
+	background: transparent;
+}
+.preview-modal-body::-webkit-scrollbar-thumb {
+	background: #cbd5e1;
+	border-radius: 4px;
+}
+.preview-modal-body::-webkit-scrollbar-thumb:hover {
+	background: #94a3b8;
+}

@@ -43,5 +43,9 @@
 	"not_found_project": "ชมรมของคุณยังไม่มีโครงการ",
 	"not_found_projects_confirmed": "ยังไม่มีโครงการที่ยืนยัน",
 	"not_found_projects_pending": "ยังไม่มีโครงการที่รอดำเนินการ",
-	"not_found_projects_rejected": "ยังไม่มีโครงการที่ถูกปฏิเสธ"
+	"not_found_projects_rejected": "ยังไม่มีโครงการที่ถูกปฏิเสธ",
+	"upload_name_of_project": "ชื่อโครงการ",
+	"upload_number_of_project": "หมายเลขหนังสือ",
+	"upload_related_documents": "เอกสารที่เกี่ยวข้อง",
+	"upload_button": "อัปโหลด"
 }
