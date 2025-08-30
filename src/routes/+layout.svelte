@@ -8,7 +8,7 @@
 	let { data, children } = $props();
 
 	const items = [
-		{ href: '/', label: m.home() },
+		{ href: '/main', label: m.home() },
 		{ href: '/searchDocument', label: m.search_document() },
 		{ href: '/demo', label: 'Demo' },
 		{ href: '/demo/paraglide', label: 'Paraglide' }
@@ -17,7 +17,10 @@
 
 <div class="md:flex">
 	{#if page.url.pathname !== '/' && page.url.pathname !== '/admin/login_form' && page.url.pathname !== '/searchDocument'}
-		<Sidebar {items} user={{ role: data.user?.role ?? undefined, name: data.user?.name  ?? undefined}} />
+		<Sidebar
+			{items}
+			user={{ role: data.user?.role ?? undefined, name: data.user?.name ?? undefined }}
+		/>
 	{/if}
 	<div class="flex min-h-screen flex-1 flex-col">
 		{#if page.url.pathname !== '/' && page.url.pathname !== '/admin/login_form' && page.url.pathname !== '/searchDocument'}

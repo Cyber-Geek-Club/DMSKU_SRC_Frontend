@@ -5,19 +5,59 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 
-	type Status = 'confirmed' | 'pending' | 'rejected';
+	// ProjectStatus (raw) may come from backend but UI filtering now derives status from signers.
+	// Raw project status (not currently driving UI logic)
+	type ProjectStatus = 'draft' | 'active' | 'archived';
+	// SignerStatus from backend
+	type SignerStatus = 'signed' | 'pending' | 'rejected';
+	// Unified status used in UI (currently same literal union)
+	type Status = 'signed' | 'pending' | 'rejected';
 	type StatusView = { label: string; pillCls: string; dotCls: string };
 
-	interface Project {
-		id: string;
-		name: string;
-		status: Status;
-		date: string; // ISO: YYYY-MM-DD
+	interface FileSummary {
+		totalFiles: number;
+		totalSigners: number;
+		signaturesCompleted: number;
 	}
 
-	let active = $state<'all' | Status>('all');
+	interface File {
+		id: number;
+		projectsId: number;
+		fileName: string;
+		description: string;
+		updated_at: number | string | null;
+		created_at: number | string;
+		deleted_at: number | string | null;
+	}
 
-	// dropdown state for Add button
+	interface Signer {
+		id: number;
+		projectFileId: number;
+		signerUserId: number;
+		position: number;
+		name: string;
+		email: string;
+		signatureStatus: SignerStatus;
+		signedAt: string | number;
+	}
+
+	interface Project {
+		id: number;
+		projectsName: string;
+		ownerUserId: number;
+		type: 'uploaded' | 'generated';
+		status: ProjectStatus;
+		updated_at: number | string | null;
+		created_at: number | string;
+		deleted_at: number | string | null;
+		files: File[];
+		signers: Signer[];
+		summary: FileSummary;
+	}
+
+	// Active tab now based on derived signer-based statuses
+	let active = $state<'all' | SignerStatus>('all');
+
 	let showAddMenu = $state(false);
 	let addMenuEl: HTMLElement | null = null;
 	let fileInput: HTMLInputElement | null = null;
@@ -33,7 +73,7 @@
 	}
 
 	function triggerUpload() {
-		fileInput?.click();
+		goto('/main/upload');
 	}
 
 	function handleFile(e: Event) {
@@ -63,53 +103,77 @@
 		}
 	});
 
-	let { searchText } = $props();
+	let { searchText, projects = [] as Project[] } = $props();
 
-	const projects: Project[] = [
-		{ id: '1', name: 'Project Alpha', status: 'confirmed', date: '2023-10-01' },
-		{ id: '2', name: 'Project Beta', status: 'pending', date: '2023-10-05' },
-		{ id: '3', name: 'Project Gamma', status: 'rejected', date: '2023-10-10' },
-		{ id: '4', name: 'Project Delta', status: 'confirmed', date: '2023-10-15' },
-		{ id: '5', name: 'Project Epsilon', status: 'pending', date: '2023-10-20' },
-		{ id: '6', name: 'Project Zeta', status: 'rejected', date: '2023-10-25' },
-		{ id: '7', name: 'Project Eta', status: 'confirmed', date: '2023-10-30' },
-		{ id: '8', name: 'Project Theta', status: 'pending', date: '2023-10-31' },
-		{ id: '9', name: 'Project Iota', status: 'rejected', date: '2023-11-01' },
-		{ id: '10', name: 'Project Kappa', status: 'confirmed', date: '2023-11-05' },
-		{ id: '11', name: 'Project Lambda', status: 'pending', date: '2023-11-10' },
-		{ id: '12', name: 'Project Mu', status: 'rejected', date: '2023-11-15' },
-		{ id: '13', name: 'Project Nu', status: 'confirmed', date: '2023-11-20' },
-		{ id: '14', name: 'Project Xi', status: 'pending', date: '2023-11-25' },
-		{ id: '15', name: 'Project Omicron', status: 'rejected', date: '2023-11-30' },
-		{ id: '16', name: 'Project Pi', status: 'confirmed', date: '2023-12-01' },
-		{ id: '17', name: 'Project Rho', status: 'pending', date: '2023-12-05' },
-		{ id: '18', name: 'Project Sigma', status: 'rejected', date: '2023-12-10' },
-		{ id: '19', name: 'Project Tau', status: 'confirmed', date: '2023-12-15' },
-		{ id: '20', name: 'Project Upsilon', status: 'pending', date: '2023-12-20' }
-	];
+	const allProjects = $derived(Array.isArray(projects) ? projects : []);
 
-	let filtered = $derived(
+	function deriveProjectStatus(p: Project): SignerStatus {
+		// Rule: any rejected -> rejected; else all signed -> signed; else pending
+		const signers = p.signers || [];
+		if (!signers.length) return 'pending';
+		if (signers.some((s) => s.signatureStatus === 'rejected')) return 'rejected';
+		return signers.every((s) => s.signatureStatus === 'signed') ? 'signed' : 'pending';
+	}
+
+	// Counts for tabs use derived status
+	const statusCounts = $derived(
+		allProjects.reduce(
+			(acc, p) => {
+				const d = deriveProjectStatus(p);
+				acc[d]++;
+				return acc;
+			},
+			{ signed: 0, pending: 0, rejected: 0 } // rejected count will stay 0 with new rule; kept for UI compatibility
+		)
+	);
+
+	// Search tokens (AND match)
+	const searchTokens = $derived(
 		(() => {
-			const q = typeof searchText === 'string' ? searchText.trim().toLowerCase() : '';
-			const base = active === 'all' ? projects : projects.filter((p) => p.status === active);
-			if (!q) return base;
-			return base.filter((p) => {
-				return p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
-			});
+			const raw = typeof searchText === 'string' ? searchText.trim().toLowerCase() : '';
+			return raw ? raw.split(/\s+/).filter(Boolean) : [];
 		})()
 	);
-	let filteredSorted = $derived(
-		Array.isArray(filtered)
-			? [...filtered].sort((a, b) => {
-					const dateCompare = b.date.localeCompare(a.date);
-					if (dateCompare !== 0) return dateCompare;
-					return Number(b.id) - Number(a.id);
-				})
-			: []
+
+	function projectMatches(p: Project, tokens: string[]): boolean {
+		if (!tokens.length) return true;
+		const parts: string[] = [String(p.id), p.projectsName.toLowerCase()];
+		for (const f of p.files || []) parts.push(f.fileName.toLowerCase());
+		for (const s of p.signers || []) parts.push(s.name.toLowerCase(), s.email.toLowerCase());
+		const haystack = parts.join(' ');
+		return tokens.every((t) => haystack.includes(t));
+	}
+
+	const statusFiltered = $derived(
+		active === 'all' ? allProjects : allProjects.filter((p) => deriveProjectStatus(p) === active)
 	);
 
-	const STATUS_MAP = {
-		confirmed: {
+	const filtered = $derived(statusFiltered.filter((p) => projectMatches(p, searchTokens)));
+
+	function toEpoch(v: number | string | null | undefined): number {
+		if (v == null) return 0;
+		if (typeof v === 'number') {
+			// Assume seconds if looks like 10-digit
+			return v < 1e12 ? v * 1000 : v;
+		}
+		// string
+		const numeric = Number(v);
+		if (!Number.isNaN(numeric)) return numeric < 1e12 ? numeric * 1000 : numeric;
+		// ISO date string fallback
+		const d = new Date(v);
+		return isNaN(d.getTime()) ? 0 : d.getTime();
+	}
+
+	const filteredSorted = $derived(
+		[...filtered].sort((a, b) => {
+			const diff = toEpoch(b.created_at) - toEpoch(a.created_at);
+			if (diff !== 0) return diff;
+			return Number(b.id) - Number(a.id);
+		})
+	);
+
+	const STATUS_MAP: Record<Status, StatusView> = {
+		signed: {
 			label: m.filter_status_confirmed(),
 			pillCls: 'status-pill status-ok',
 			dotCls: 'status-dot status-ok-dot'
@@ -124,35 +188,53 @@
 			pillCls: 'status-pill status-bad',
 			dotCls: 'status-dot status-bad-dot'
 		}
-	} as const satisfies Record<Status, StatusView>;
+	};
 
-	const getStatus = (s: Status): StatusView => STATUS_MAP[s];
+	const getStatus = (s: Status): StatusView => STATUS_MAP[s] ?? STATUS_MAP.pending;
 
-	function formatDateTH(iso: string): string {
-		const d = new Date(iso + 'T00:00:00');
+	function formatDateTH(value: number | string): string {
+		// Accept: epoch seconds, epoch ms, ISO string
+		let ms: number;
+		if (typeof value === 'number') {
+			ms = value < 1e12 ? value * 1000 : value;
+		} else {
+			const num = Number(value);
+			if (!Number.isNaN(num)) {
+				ms = num < 1e12 ? num * 1000 : num;
+			} else {
+				const parsed = new Date(value).getTime();
+				ms = isNaN(parsed) ? Date.now() : parsed;
+			}
+		}
+		const d = new Date(ms);
 		return d.toLocaleDateString('th-TH', { day: '2-digit', month: 'long', year: 'numeric' });
 	}
-	// Use $derived instead of legacy `$:` reactive statement (Svelte 5 runes mode)
 </script>
 
 <div class="container-List">
 	<div class="filter-bar">
 		<nav class="tabs">
-			<button class="tab-item {active === 'all' ? 'active' : ''}" onclick={() => (active = 'all')}
-				>{m.filter_status_all()}</button
-			>
+			<button class="tab-item {active === 'all' ? 'active' : ''}" onclick={() => (active = 'all')}>
+				{m.filter_status_all()} ({allProjects.length})
+			</button>
 			<button
-				class="tab-item {active === 'confirmed' ? 'active' : ''}"
-				onclick={() => (active = 'confirmed')}>{m.filter_status_confirmed()}</button
+				class="tab-item {active === 'signed' ? 'active' : ''}"
+				onclick={() => (active = 'signed')}
 			>
+				{m.filter_status_confirmed()} ({statusCounts.signed})
+			</button>
 			<button
 				class="tab-item {active === 'pending' ? 'active' : ''}"
-				onclick={() => (active = 'pending')}>{m.filter_status_pending()}</button
+				onclick={() => (active = 'pending')}
 			>
+				{m.filter_status_pending()} ({statusCounts.pending})
+			</button>
 			<button
 				class="tab-item {active === 'rejected' ? 'active' : ''}"
-				onclick={() => (active = 'rejected')}>{m.filter_status_rejected()}</button
+				onclick={() => (active = 'rejected')}
 			>
+				{m.filter_status_rejected()} ({statusCounts.rejected})
+			</button>
 		</nav>
 
 		<div class="Add-project" bind:this={addMenuEl}>
@@ -206,7 +288,7 @@
 					<p class="empty-text">
 						{active === 'all'
 							? m.not_found_project()
-							: active === 'confirmed'
+							: active === 'signed'
 								? m.not_found_projects_confirmed()
 								: active === 'pending'
 									? m.not_found_projects_pending()
@@ -218,16 +300,18 @@
 					<div class="project-item">
 						<div class="col id">{p.id}</div>
 
-						<div class="col name">{p.name}</div>
+						<div class="col name">{p.projectsName}</div>
 
 						<div class="col">
-							<span class={getStatus(p.status).pillCls}>
-								<span class={getStatus(p.status).dotCls}></span>
-								{getStatus(p.status).label}
-							</span>
+							{#key p.signers}
+								<span class={getStatus(deriveProjectStatus(p)).pillCls}>
+									<span class={getStatus(deriveProjectStatus(p)).dotCls}></span>
+									{getStatus(deriveProjectStatus(p)).label}
+								</span>
+							{/key}
 						</div>
 
-						<div class="col date">{formatDateTH(p.date)}</div>
+						<div class="col date">{formatDateTH(p.created_at)}</div>
 
 						<div class="col actions">
 							<button class="action-btn" title="ดูรายละเอียด">
