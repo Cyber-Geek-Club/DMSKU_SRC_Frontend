@@ -6,12 +6,8 @@
 	import DocumentItem from '$lib/uploadAssets/DocumentItem.svelte';
 	import PreviewModal from '$lib/uploadAssets/PreviewModal.svelte';
 	import {
-		seedDocuments,
 		addFiles,
-		uploadDocument,
-		uploadAll as uploadAllDocs,
 		type DocItem,
-		allUploaded,
 		ensurePreviewUrl,
 		releasePreviewUrl,
 		addSigner,
@@ -23,38 +19,105 @@
 	import { projectFile } from '$lib/api/projectFile';
 	import { user } from '$lib/api/user';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 
 	let inputRef: HTMLInputElement | null = null;
 
 	let projectName = $state('');
 	let projectNumber = $state('');
-	let savingDraft = $state(false);
-	let draftProjectId = $state<number | null>(null);
+	let saving = $state(false);
+	let projectId = $state<number | null>(null);
+	let currentStatus: 'draft' | 'active' | null = null;
 
-	async function saveDraft() {
-		if (savingDraft) return;
+	onMount(async () => {
+		try {
+			const allRes = await user.getAllUsers();
+			const arr = (allRes.data?.data ?? allRes.data ?? []) as any[];
+			allUsers = arr
+				.map((u) => ({
+					id: u.id ?? u.userId ?? u.uid ?? null,
+					name: u.name ?? u.fullName ?? u.displayName ?? '',
+					email: u.email ?? ''
+				}))
+				.filter((u) => u.name && u.email);
+			console.log('all users', allUsers);
+		} catch (e) {
+			console.warn('โหลดรายชื่อผู้ใช้ทั้งหมดไม่สำเร็จ', e);
+		}
+
+		const params = page?.url?.searchParams ?? new URLSearchParams(window.location.search);
+		const editIdStr = params.get('edit');
+		if (!editIdStr) return;
+		const id = Number(editIdStr);
+		if (!id || Number.isNaN(id)) return;
+		try {
+			const res = await project.getById(id);
+			const data = res.data;
+			if (!data) return;
+			if (data.status !== 'draft') {
+				alert('แก้ไขได้เฉพาะโครงการสถานะ draft');
+				return;
+			}
+			projectId = data.id;
+			currentStatus = data.status;
+			projectName = data.projectsName || '';
+			const fileArray = Array.isArray(data.files) ? data.files : [];
+			const signerArray = Array.isArray(data.signers) ? data.signers : [];
+			const fileIdToSigners: Record<number, typeof signerArray> = {};
+			for (const s of signerArray) {
+				if (!fileIdToSigners[s.projectFileId]) fileIdToSigners[s.projectFileId] = [];
+				fileIdToSigners[s.projectFileId].push(s);
+			}
+			documents = fileArray.map((f: any, idx: number) => ({
+				id: `existing-${f.id}`,
+				name: f.fileName || f.description || `File-${f.id}`,
+				file: null,
+				progress: 100,
+				status: 'done',
+				previewUrl: undefined,
+				projectFileId: f.id,
+				signers: (fileIdToSigners[f.id] || []).map((s: any, si: number) => ({
+					key: `loaded-${f.id}-${s.userId ?? s.uid ?? s.id ?? si}`,
+					userId: s.userId ?? s.uid ?? s.id ?? null,
+					name: s.name || '',
+					email: s.email || '',
+					order: s.position ?? si + 1
+				}))
+			}));
+			documents = [...documents];
+		} catch (e) {
+			console.error('โหลดโปรเจ็กต์ไม่สำเร็จ', e);
+			alert('ไม่สามารถโหลดโปรเจ็กต์สำหรับแก้ไข');
+		}
+	});
+
+	async function upsertProject(targetStatus: 'draft' | 'active') {
+		if (saving) return;
 		if (!projectName.trim()) {
 			alert('กรุณากรอกชื่อโครงการ');
 			return;
 		}
-		savingDraft = true;
+		if (targetStatus === 'active' && documents.length === 0) {
+			if (!confirm('ยังไม่มีไฟล์ แน่ใจหรือไม่ที่จะสร้างโครงการ (Active)?')) return;
+		}
+		saving = true;
 		try {
-			if (!draftProjectId) {
-				const res = await project.createDraft(projectName.trim());
-				draftProjectId = res.data?.id ?? res.data?.projectsId ?? res.data?.projectId ?? null;
-				if (!draftProjectId) throw new Error('Project id not returned');
-			}
-			const emailUserIdCache: Record<string, number> = {};
-			async function resolveUserId(email: string): Promise<number | null> {
-				if (emailUserIdCache[email]) return emailUserIdCache[email];
+			if (!projectId) {
+				const createRes =
+					targetStatus === 'active'
+						? await project.createActive(projectName.trim())
+						: await project.createDraft(projectName.trim());
+				projectId =
+					createRes.data?.id ?? createRes.data?.projectsId ?? createRes.data?.projectId ?? null;
+				currentStatus = targetStatus;
+				if (!projectId) throw new Error('Project id not returned');
+			} else if (currentStatus !== targetStatus) {
 				try {
-					const res = await user.getUserData(email);
-					const uid = res.data?.id ?? res.data?.userId ?? res.data?.data?.id ?? null;
-					if (uid) emailUserIdCache[email] = uid;
-					return uid;
+					await project.updateStatus(projectId, targetStatus);
+					currentStatus = targetStatus;
 				} catch (e) {
-					console.warn('หา user ไม่เจอสำหรับ email', email, e);
-					return null;
+					console.warn('อัปเดตสถานะไม่สำเร็จ', e);
 				}
 			}
 
@@ -66,7 +129,7 @@
 					doc.progress = 0;
 					documents = [...documents];
 					const uploadRes = await projectFile.uploadProjectFile(
-						draftProjectId,
+						projectId,
 						doc.file,
 						doc.name,
 						(percent) => {
@@ -78,12 +141,10 @@
 						uploadRes.data?.id ?? uploadRes.data?.projectFileId ?? uploadRes.data?.fileId;
 					if (projectFileId) {
 						for (const signer of doc.signers.sort((a, b) => a.order - b.order)) {
-							if (!signer.email) continue;
-							const userId = await resolveUserId(signer.email);
-							if (!userId) continue;
+							if (!signer.userId) continue; // must choose a user
 							try {
-								await projectFile.createFileSigner(projectFileId, userId, signer.order);
-								await projectFile.createFileSignature(projectFileId, userId);
+								await projectFile.createFileSigner(projectFileId, signer.userId, signer.order);
+								await projectFile.createFileSignature(projectFileId, signer.userId);
 							} catch (e) {
 								console.error('สร้าง signer/signature ล้มเหลว', signer, e);
 							}
@@ -99,40 +160,18 @@
 				}
 			}
 			documents = [...documents];
-			alert('บันทึกร่าง + อัปโหลดไฟล์เสร็จแล้ว');
-			goto(`/main`);
-		} catch (err) {
-			console.error('Save draft error', err);
-			alert('บันทึกร่างไม่สำเร็จ');
+			alert(targetStatus === 'draft' ? 'บันทึกร่างเสร็จแล้ว' : 'สร้างโครงการ Active เสร็จแล้ว');
+			goto('/main');
+		} catch (e) {
+			console.error('Upsert project error', e);
+			alert('บันทึกไม่สำเร็จ');
 		} finally {
-			savingDraft = false;
+			saving = false;
 		}
-	}
-
-	async function createProject() {
-		if (!projectName.trim()) {
-			alert('กรุณากรอกชื่อโครงการ');
-			return;
-		}
-		if (documents.length === 0) {
-			if (!confirm('ยังไม่มีไฟล์ แน่ใจหรือไม่ที่จะสร้างโครงการ?')) return;
-		}
-		const notUploaded = documents.filter((d) => d.status !== 'done');
-		if (notUploaded.length) {
-			if (confirm('ยังมีไฟล์ที่ยังไม่ได้อัปโหลด ต้องการอัปโหลดทั้งหมดก่อนหรือไม่?')) {
-				await uploadAll();
-			} else if (notUploaded.some((d) => d.status === 'uploading')) {
-				alert('กำลังอัปโหลดไฟล์อยู่ กรุณารอให้เสร็จก่อน');
-				return;
-			}
-		}
-		console.log('Create project', { projectName, projectNumber, documents });
 	}
 
 	let documents = $state<DocItem[]>([]);
-
-	const UPLOAD_ENDPOINT = '/api/upload';
-
+	let allUsers = $state<{ id: number | null; name: string; email: string }[]>([]);
 	let isUploading = $state(false);
 	let previewTarget = $state<DocItem | null>(null);
 	let previewUrl = $state<string | null>(null);
@@ -150,31 +189,68 @@
 
 	function handleUpdateSigner(
 		doc: DocItem,
-		signerId: string,
+		signerKey: string,
 		field: 'name' | 'email',
 		value: string
 	) {
-		updateSigner(doc, signerId, { [field]: value });
+		// basic field update
+		updateSigner(doc, signerKey, { [field]: value });
+		// attempt to map to a backend user id if both name or email matches a user
+		const signer = doc.signers.find((s) => s.key === signerKey);
+		if (signer) {
+			const match = allUsers.find(
+				(u) =>
+					(!!signer.email && u.email.toLowerCase() === signer.email.toLowerCase()) ||
+					(!!signer.name && u.name.toLowerCase() === signer.name.toLowerCase())
+			);
+			if (match && match.id != null && match.id !== signer.userId) {
+				updateSigner(doc, signerKey, { userId: match.id });
+			}
+		}
 		documents = [...documents];
 	}
 
-	function handleRemoveSigner(doc: DocItem, signerId: string) {
-		removeSigner(doc, signerId);
+	function handleRemoveSigner(doc: DocItem, signerKey: string) {
+		removeSigner(doc, signerKey);
 		documents = [...documents];
 	}
 
-	function moveSigner(doc: DocItem, signerId: string, direction: -1 | 1) {
-		const idx = doc.signers.findIndex((s) => s.id === signerId);
+	function moveSigner(doc: DocItem, signerKey: string, direction: -1 | 1) {
+		const idx = doc.signers.findIndex((s) => s.key === signerKey);
 		if (idx === -1) return;
 		reorderSigners(doc, idx, idx + direction);
 		documents = [...documents];
 	}
 
 	function openPreview(doc: DocItem) {
-		const url = ensurePreviewUrl(doc);
-		if (!url) return; // seed without file
-		previewTarget = doc;
-		previewUrl = url;
+		if (doc.file) {
+			const url = ensurePreviewUrl(doc);
+			if (!url) return;
+			previewTarget = doc;
+			previewUrl = url;
+			return;
+		}
+		if (doc.projectFileId) {
+			if (doc.previewUrl) {
+				previewTarget = doc;
+				previewUrl = doc.previewUrl;
+				return;
+			}
+			projectFile
+				.downloadProjectFile(doc.projectFileId)
+				.then((res) => {
+					const blob = res.data as Blob;
+					const url = URL.createObjectURL(blob);
+					doc.previewUrl = url;
+					previewTarget = doc;
+					previewUrl = url;
+					documents = [...documents];
+				})
+				.catch((err) => {
+					console.error('ดาวน์โหลดไฟล์ไม่สำเร็จ', err);
+					alert('ดาวน์โหลดไฟล์ไม่สำเร็จ');
+				});
+		}
 	}
 
 	function closePreview() {
@@ -194,19 +270,20 @@
 		target.value = '';
 	}
 
-	function removeDocument(id: string) {
+	async function removeDocument(id: string) {
+		const doc = documents.find((d) => d.id === id);
+		if (!doc) return;
+		if (doc.projectFileId) {
+			if (!confirm('ลบไฟล์นี้ออกจากระบบถาวร?')) return;
+			try {
+				await projectFile.deleteProjectFile(doc.projectFileId);
+			} catch (e) {
+				console.error('ลบไฟล์ backend ไม่สำเร็จ', e);
+				alert('ลบไฟล์ไม่สำเร็จ');
+				return;
+			}
+		}
 		documents = documents.filter((d) => d.id !== id);
-	}
-
-	async function uploadSingle(doc: DocItem) {
-		await uploadDocument(doc, UPLOAD_ENDPOINT, () => (documents = [...documents]));
-	}
-
-	async function uploadAll() {
-		if (isUploading) return;
-		isUploading = true;
-		await uploadAllDocs(documents, UPLOAD_ENDPOINT, (updated) => (documents = updated));
-		isUploading = false;
 	}
 </script>
 
@@ -222,14 +299,13 @@
 		<div class="mt-4 flex self-end justify-self-end">
 			<button
 				class="rounded-2xl border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
-				onclick={saveDraft}
-				disabled={isUploading || savingDraft}
-				>{savingDraft ? 'กำลังบันทึก...' : 'บันทึกโครงร่าง'}</button
+				onclick={() => upsertProject('draft')}
+				disabled={isUploading || saving}>{saving ? 'กำลังบันทึก...' : 'บันทึกโครงร่าง'}</button
 			>
 			<button
 				class="rounded-2xl bg-ku-dark-green px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-				onclick={createProject}
-				disabled={isUploading || savingDraft}>สร้างโครงการ</button
+				onclick={() => upsertProject('active')}
+				disabled={isUploading || saving}>สร้างโครงการ</button
 			>
 		</div>
 	</div>
@@ -241,6 +317,7 @@
 			{#each documents as doc (doc.id)}
 				<DocumentItem
 					{doc}
+					{allUsers}
 					expanded={!!expanded[doc.id]}
 					{isUploading}
 					preview={({ doc }) => openPreview(doc)}

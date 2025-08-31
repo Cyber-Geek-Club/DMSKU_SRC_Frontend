@@ -37,10 +37,28 @@ function createFileSignature(projectFileId: number, signerUserId: number) {
 	return http.post('/documents/signatures', { projectFileId, signerUserId });
 }
 
+// Download (as blob) a project file for preview/display. Assumes backend route returns binary
+function downloadProjectFile(fileId: number) {
+	return http.get(`/documents/files/${fileId}/download`, { responseType: 'blob' });
+}
+
+// Delete a project file from backend
+function deleteProjectFile(fileId: number) {
+	return http.delete(`/documents/files/${fileId}/hard`);
+}
+
 export const projectFile = {
 	uploadProjectFile,
 	createFileSigner,
-	createFileSignature
+	createFileSignature,
+	downloadProjectFile,
+	deleteProjectFile
 };
 
-export { uploadProjectFile, createFileSigner, createFileSignature };
+export {
+	uploadProjectFile,
+	createFileSigner,
+	createFileSignature,
+	downloadProjectFile,
+	deleteProjectFile
+};

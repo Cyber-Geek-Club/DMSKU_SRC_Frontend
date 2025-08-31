@@ -4,6 +4,7 @@
 
 	let {
 		doc,
+		allUsers = [],
 		expanded = false,
 		isUploading = false,
 		preview = (() => {}) as (p: { doc: DocItem }) => void,
@@ -12,7 +13,7 @@
 		addsigner = (() => {}) as (p: { doc: DocItem }) => void,
 		updatesigner = (() => {}) as (p: {
 			doc: DocItem;
-			id: string;
+			id: string; // signer.key
 			field: 'name' | 'email';
 			value: string;
 		}) => void,
@@ -20,6 +21,7 @@
 		movesigner = (() => {}) as (p: { doc: DocItem; id: string; dir: -1 | 1 }) => void
 	} = $props<{
 		doc: DocItem;
+		allUsers?: { id: number | null; name: string; email: string }[];
 		expanded?: boolean;
 		isUploading?: boolean;
 		preview?: (p: { doc: DocItem }) => void;
@@ -28,13 +30,36 @@
 		addsigner?: (p: { doc: DocItem }) => void;
 		updatesigner?: (p: {
 			doc: DocItem;
-			id: string;
+			id: string; // signer.key
 			field: 'name' | 'email';
 			value: string;
 		}) => void;
 		removesigner?: (p: { doc: DocItem; id: string }) => void;
 		movesigner?: (p: { doc: DocItem; id: string; dir: -1 | 1 }) => void;
 	}>();
+
+	type UserOption = { id: number | null; name: string; email: string };
+	let openSuggestFor = $state<string | null>(null); // signer.key ที่เปิด dropdown
+	let query: Record<string, string> = {}; // เก็บข้อความที่พิมพ์ชื่อ
+
+	function filteredUsers(signerId: string): UserOption[] {
+		const q = (query[signerId] || '').trim().toLowerCase();
+		if (!q) return [];
+		return (allUsers as UserOption[])
+			.filter(
+				(u: UserOption) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+			)
+			.slice(0, 8);
+	}
+
+	function chooseUser(signerKey: string, u: UserOption) {
+		// update name/email fields
+		emitUpdateSigner(signerKey, 'name', u.name);
+		emitUpdateSigner(signerKey, 'email', u.email);
+		query[signerKey] = u.name;
+		openSuggestFor = null;
+		// direct userId assignment is handled in parent via updateSigner when saving (not needed here)
+	}
 
 	function emitPreview() {
 		preview({ doc });
@@ -73,8 +98,11 @@
 			<span class="truncate text-sm font-medium" title={doc.name}>{doc.name}</span>
 		</div>
 		<div class="flex items-center gap-2">
-			<button class="preview-trigger-btn" type="button" onclick={emitPreview} disabled={!doc.file}
-				>Preview</button
+			<button
+				class="preview-trigger-btn"
+				type="button"
+				onclick={emitPreview}
+				disabled={!doc.file && !doc.projectFileId}>Preview</button
 			>
 			{#if doc.status === 'error'}
 				<span class="text-xs text-red-600" title={doc.error}>Error</span>
@@ -118,7 +146,7 @@
 				<p class="text-gray-500 italic">ยังไม่มีผู้เซ็น</p>
 			{/if}
 			<ul class="flex flex-col gap-2">
-				{#each doc.signers as signer, i (signer.id)}
+				{#each doc.signers as signer, i (signer.key)}
 					<li class="flex flex-col gap-1 rounded border border-gray-300 bg-white p-2">
 						<div class="flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
@@ -128,32 +156,66 @@
 								>
 								<button
 									class="rounded border px-1 text-[10px] hover:bg-gray-100 disabled:opacity-30"
-									onclick={() => emitMoveSigner(signer.id, -1)}
+									onclick={() => emitMoveSigner(signer.key, -1)}
 									disabled={i === 0}
 									type="button">↑</button
 								>
 								<button
 									class="rounded border px-1 text-[10px] hover:bg-gray-100 disabled:opacity-30"
-									onclick={() => emitMoveSigner(signer.id, 1)}
+									onclick={() => emitMoveSigner(signer.key, 1)}
 									disabled={i === doc.signers.length - 1}
 									type="button">↓</button
 								>
 							</div>
 							<button
 								class="rounded p-1 text-red-600 hover:bg-red-50"
-								onclick={() => emitRemoveSigner(signer.id)}
+								onclick={() => emitRemoveSigner(signer.key)}
 								aria-label={`Remove signer ${i + 1}`}
 								type="button">✕</button
 							>
 						</div>
-						<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+						<div class="relative grid grid-cols-1 gap-2 md:grid-cols-2">
 							<input
 								class="w-full rounded border px-2 py-1 text-xs focus:ring focus:outline-none"
-								placeholder="ชื่อ"
+								placeholder="ชื่อผู้เซ็น (เริ่มพิมพ์เพื่อค้นหา)"
 								value={signer.name}
-								oninput={(e) =>
-									emitUpdateSigner(signer.id, 'name', (e.target as HTMLInputElement).value)}
+								onfocus={() => {
+									query[signer.key] = signer.name;
+									openSuggestFor = signer.key;
+								}}
+								oninput={(e) => {
+									const val = (e.target as HTMLInputElement).value;
+									query[signer.key] = val;
+									emitUpdateSigner(signer.key, 'name', val);
+									openSuggestFor = signer.key;
+								}}
+								onblur={() => {
+									setTimeout(() => {
+										if (openSuggestFor === signer.key) openSuggestFor = null;
+									}, 200);
+								}}
 							/>
+							{#if openSuggestFor === signer.key && filteredUsers(signer.key).length > 0}
+								<ul
+									class="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded border bg-white text-xs shadow"
+								>
+									{#each filteredUsers(signer.key) as u}
+										<li>
+											<button
+												type="button"
+												class="flex w-full cursor-pointer items-center justify-start gap-1 px-2 py-1 text-left hover:bg-gray-100"
+												onmousedown={(e) => {
+													e.preventDefault();
+													chooseUser(signer.key, u);
+												}}
+											>
+												<strong>{u.name}</strong>
+												<span class="text-gray-500"> — {u.email}</span>
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{/if}
 						</div>
 					</li>
 				{/each}

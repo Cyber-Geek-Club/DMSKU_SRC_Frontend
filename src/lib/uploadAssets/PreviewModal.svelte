@@ -10,6 +10,20 @@
 		url?: string | null;
 		close?: () => void;
 	}>();
+
+	// Derive type even when doc.file is absent (backend downloaded blob stored via previewUrl only)
+	function inferKind(d: DocItem | null) {
+		if (!d) return { isPdf: false, isImage: false };
+		const lower = d.name.toLowerCase();
+		const isPdf = lower.endsWith('.pdf') || d.file?.type === 'application/pdf';
+		const isImage =
+			/\.(png|jpe?g|gif|webp|svg)$/.test(lower) || (d.file?.type || '').startsWith('image/');
+		return { isPdf, isImage };
+	}
+	let kind = $state({ isPdf: false, isImage: false });
+	$effect(() => {
+		kind = inferKind(doc);
+	});
 </script>
 
 {#if url && doc}
@@ -20,14 +34,12 @@
 				<button class="preview-close-btn" onclick={close}>✕</button>
 			</div>
 			<div class="preview-modal-body">
-				{#if doc.file && doc.file.type.startsWith('image/')}
+				{#if kind.isImage}
 					<img src={url} alt={doc.name} class="preview-image" />
-				{:else if doc.file && doc.file.type === 'application/pdf'}
+				{:else if kind.isPdf}
 					<iframe src={url} class="preview-iframe" title={doc.name}></iframe>
-				{:else if doc.file}
-					<p class="text-sm">ไม่รองรับ preview สำหรับไฟล์นี้ (type: {doc.file.type})</p>
 				{:else}
-					<p class="text-sm opacity-70">ไม่มีไฟล์จริงสำหรับรายการนี้</p>
+					<p class="text-sm opacity-70">ไม่รองรับ preview สำหรับไฟล์นี้ ดาวน์โหลดเพื่อเปิดดู</p>
 				{/if}
 			</div>
 			<div class="preview-modal-footer">

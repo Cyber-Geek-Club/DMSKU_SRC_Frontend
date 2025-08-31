@@ -47,6 +47,7 @@
 		ownerUserId: number;
 		type: 'uploaded' | 'generated';
 		status: ProjectStatus;
+		projectCode?: string;
 		updated_at: number | string | null;
 		created_at: number | string;
 		deleted_at: number | string | null;
@@ -55,7 +56,6 @@
 		summary: FileSummary;
 	}
 
-	// Active tab now based on derived signer-based statuses
 	let active = $state<'all' | SignerStatus>('all');
 
 	let showAddMenu = $state(false);
@@ -209,6 +209,64 @@
 		const d = new Date(ms);
 		return d.toLocaleDateString('th-TH', { day: '2-digit', month: 'long', year: 'numeric' });
 	}
+
+	// QR Code Modal state
+	let showQR = $state(false);
+	let qrLoading = $state(false);
+	let qrError = $state<string | null>(null);
+	let currentQRProject = $state<Project | null>(null);
+	let qrDataUrl = $state<string | null>(null);
+
+	async function openQR(p: Project) {
+		showQR = true;
+		qrLoading = true;
+		qrError = null;
+		currentQRProject = p;
+		qrDataUrl = null;
+		try {
+			// fetch data-url JSON (default)
+			const { project } = await import('$lib/api/project');
+			const res = await project.getQRCode(p.id, { format: 'data-url', scale: 6 });
+			// response.data may contain either buffer or json depending on format; we requested json
+			qrDataUrl = res.data?.qr || null;
+			if (!qrDataUrl) qrError = 'ไม่พบข้อมูล QR';
+		} catch (e) {
+			qrError = 'โหลด QR ไม่สำเร็จ';
+			console.error('QR fetch error', e);
+		} finally {
+			qrLoading = false;
+		}
+	}
+
+	function closeQR() {
+		showQR = false;
+		qrDataUrl = null;
+		currentQRProject = null;
+	}
+
+	function goToSearch(p: Project) {
+		const code = p.projectCode ? encodeURIComponent(p.projectCode) : '';
+		goto(`/searchDocument${code ? `?code=${code}` : ''}`);
+	}
+
+	async function downloadPNG(p: Project | null) {
+		if (!p) return;
+		try {
+			const { project } = await import('$lib/api/project');
+			const res = await project.getQRCode(p.id, { format: 'png', scale: 8 });
+			const blob = new Blob([res.data], { type: 'image/png' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `project-${p.id}-qr.png`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			console.error('Download QR failed', e);
+		}
+	}
 </script>
 
 <div class="container-List">
@@ -314,11 +372,18 @@
 						<div class="col date">{formatDateTH(p.created_at)}</div>
 
 						<div class="col actions">
-							<button class="action-btn" title="ดูรายละเอียด">
+							<button class="action-btn" title="ดูรายละเอียด" onclick={() => goToSearch(p)}>
 								<Icon icon="tabler:eye" class="h-5 w-5" />
 							</button>
+							<button class="action-btn" title="QR Code" onclick={() => openQR(p)}>
+								<Icon icon="tabler:qrcode" class="h-5 w-5" />
+							</button>
 							<button class="action-btn" title="แก้ไข">
-								<Icon icon="tabler:pencil" class="h-5 w-5" />
+								<Icon
+									icon="tabler:pencil"
+									class="h-5 w-5"
+									onclick={() => goto(`/main/upload?edit=${p.id}`)}
+								/>
 							</button>
 							<button class="action-btn" title="ลบ">
 								<Icon icon="tabler:trash" class="h-5 w-5" />
@@ -329,4 +394,102 @@
 			{/if}
 		</div>
 	</div>
+
+	{#if showQR}
+		<div
+			class="qr-modal-backdrop"
+			role="button"
+			aria-label="ปิดหน้าต่าง"
+			tabindex="0"
+			onclick={(e) => e.currentTarget === e.target && closeQR()}
+			onkeydown={(e) => (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') && closeQR()}
+		>
+			<div class="qr-modal" role="dialog" aria-modal="true">
+				<div class="qr-header">
+					<h3>QR Code</h3>
+					<button class="close-btn" onclick={closeQR} aria-label="Close">
+						<Icon icon="tabler:x" class="h-5 w-5" />
+					</button>
+				</div>
+				{#if qrLoading}
+					<p>กำลังโหลด...</p>
+				{:else if qrError}
+					<p class="error">{qrError}</p>
+				{:else if qrDataUrl}
+					<div class="qr-body">
+						<img src={qrDataUrl} alt="QR Code" class="qr-image" />
+						{#if currentQRProject?.projectCode}
+							<p class="qr-code-text">{currentQRProject.projectCode}</p>
+						{/if}
+						<button class="download-btn" onclick={() => downloadPNG(currentQRProject)}>
+							<Icon icon="tabler:download" class="h-5 w-5" /> ดาวน์โหลด PNG
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	<style>
+		.qr-modal-backdrop {
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.4);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			z-index: 1000;
+		}
+		.qr-modal {
+			background: #fff;
+			padding: 1rem 1.25rem;
+			border-radius: 12px;
+			width: min(90%, 340px);
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+			display: flex;
+			flex-direction: column;
+			gap: 0.75rem;
+		}
+		.qr-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+		.qr-image {
+			width: 100%;
+			height: auto;
+			image-rendering: pixelated;
+		}
+		.qr-body {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			align-items: center;
+		}
+		.qr-code-text {
+			font-family: monospace;
+			font-size: 0.85rem;
+			background: #f5f5f5;
+			padding: 0.25rem 0.5rem;
+			border-radius: 4px;
+		}
+		.close-btn,
+		.download-btn {
+			background: #f0f0f0;
+			border: none;
+			cursor: pointer;
+			padding: 0.5rem 0.75rem;
+			border-radius: 6px;
+			display: inline-flex;
+			align-items: center;
+			gap: 0.35rem;
+		}
+		.close-btn:hover,
+		.download-btn:hover {
+			background: #e2e2e2;
+		}
+		.error {
+			color: #c00;
+		}
+	</style>
 </div>

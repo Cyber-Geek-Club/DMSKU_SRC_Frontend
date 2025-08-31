@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages.js';
 	import Icon from '@iconify/svelte';
-	let { onTextChange = $bindable(''), query = $bindable('') } = $props();
+	let { onTextChange = $bindable(''), onSearch = undefined as undefined | (() => void) } = $props();
 </script>
 
 <div class="flex w-full max-w-xl items-center overflow-hidden rounded-full bg-white shadow-md">
@@ -16,7 +16,9 @@
 	/>
 	<button
 		class="rounded-r-full bg-[#B2BB1E] px-6 py-2 font-medium text-white transition hover:bg-lime-600"
-		onclick={() => (query = onTextChange)}
+		onclick={() => {
+			onSearch?.();
+		}}
 	>
 		{m.track()}
 	</button>

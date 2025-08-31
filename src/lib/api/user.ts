@@ -11,14 +11,18 @@ export const user = {
 		role: UserRole,
 		position: UserPosition
 	) => {
-		return http.post('/user', { email, name, phoneNumber, role, position });
+		return http.post('/users', { email, name, phoneNumber, role, position });
 	},
 
 	getUserData: (email: string) => {
-		return http.get('/user', { params: { email } });
+		return http.get('/users', { params: { email } });
 	},
 
 	getCountOfUsers: () => {
-		return http.get('/user/count');
+		return http.get('/users/count');
+	},
+
+	getAllUsers: () => {
+		return http.get('/users');
 	}
 };

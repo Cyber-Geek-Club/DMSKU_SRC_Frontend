@@ -18,7 +18,6 @@ export const load: PageServerLoad = async ({ request }) => {
 			return { projects: [] };
 		}
 		const data = await res.json();
-		console.log('Fetched projects:', data);
 		return { projects: Array.isArray(data) ? data : (data ?? []) };
 	} catch {
 		return { projects: [] };

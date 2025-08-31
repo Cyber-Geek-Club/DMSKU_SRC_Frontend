@@ -1,9 +1,19 @@
 import { http } from './http';
 
-// NOTE: Backend ใช้ field ชื่อ "projectsName" (มี s) ตามตัวอย่างในเอกสาร
-// ฟังก์ชันดั้งเดิม createProject ยังคงไว้ (อาจใช้ที่อื่น) แต่จะส่งทั้งสอง key เพื่อความเข้ากันได้
 export const project = {
 	getList: () => http.get('/projects/owner/me'),
+	getById: (id: number) => http.get(`/projects/${id}`, { params: { includeRelations: true } }),
+	getByCode: (code: string) =>
+		http.get(`/projects/code/${code}`, { params: { includeRelations: true } }),
+	getQRCode: (id: number, opts?: { format?: 'png' | 'data-url'; scale?: number }) =>
+		http.get(`/projects/${id}/qr`, {
+			params: { format: opts?.format, scale: opts?.scale },
+			responseType: opts?.format === 'png' ? 'arraybuffer' : 'json'
+		}),
 	createDraft: (projectsName: string) =>
-		http.post('/projects', { projectsName, type: 'uploaded', status: 'draft' })
+		http.post('/projects', { projectsName, type: 'uploaded', status: 'draft' }),
+	createActive: (projectsName: string) =>
+		http.post('/projects', { projectsName, type: 'uploaded', status: 'active' }),
+	updateStatus: (projectId: number, status: 'draft' | 'active') =>
+		http.put(`/projects/${projectId}`, { status })
 };

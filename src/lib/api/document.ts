@@ -10,11 +10,15 @@ export interface DocItem {
 	status: UploadStatus;
 	error?: string;
 	previewUrl?: string;
+	projectFileId?: number; // existing file id from backend (for edit mode)
 	signers: Signer[];
 }
 
 export interface Signer {
-	id: string;
+	// Unique key for UI operations (always present)
+	key: string;
+	// Backend user id (null until user is chosen from list)
+	userId: number | null;
 	name: string;
 	email: string;
 	order: number;
@@ -22,7 +26,7 @@ export interface Signer {
 
 function createDocItem(file: File, idx = 0): DocItem {
 	return {
-		id: `${Date.now()}-${idx}-${file.name}`,
+		id: `${Date.now()}-${idx}`,
 		name: file.name,
 		file,
 		progress: 0,
@@ -43,7 +47,7 @@ function addFiles(existing: DocItem[], files: FileList): DocItem[] {
 function seedDocuments(): DocItem[] {
 	return [
 		{
-			id: 'seed-1',
+			id: '1',
 			name: 'Document1.pdf',
 			file: null,
 			progress: 0,
@@ -52,7 +56,7 @@ function seedDocuments(): DocItem[] {
 			signers: []
 		},
 		{
-			id: 'seed-2',
+			id: '2',
 			name: 'Document2.pdf',
 			file: null,
 			progress: 0,
@@ -61,7 +65,7 @@ function seedDocuments(): DocItem[] {
 			signers: []
 		},
 		{
-			id: 'seed-3',
+			id: '3',
 			name: 'Document3.pdf',
 			file: null,
 			progress: 0,
@@ -152,7 +156,8 @@ function ensurePreviewUrl(doc: DocItem): string | null {
 function addSigner(doc: DocItem, name = '', email = ''): Signer {
 	const nextOrder = doc.signers.length + 1;
 	const signer: Signer = {
-		id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		key: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		userId: null,
 		name,
 		email,
 		order: nextOrder
@@ -160,14 +165,17 @@ function addSigner(doc: DocItem, name = '', email = ''): Signer {
 	doc.signers = [...doc.signers, signer];
 	return signer;
 }
-
-function updateSigner(doc: DocItem, signerId: string, data: Partial<Omit<Signer, 'id' | 'order'>>) {
-	doc.signers = doc.signers.map((s) => (s.id === signerId ? { ...s, ...data } : s));
+function updateSigner(
+	doc: DocItem,
+	signerKey: string,
+	data: Partial<Omit<Signer, 'key' | 'order'>> & { userId?: number | null }
+) {
+	doc.signers = doc.signers.map((s) => (s.key === signerKey ? { ...s, ...data } : s));
 }
 
-function removeSigner(doc: DocItem, signerId: string) {
+function removeSigner(doc: DocItem, signerKey: string) {
 	doc.signers = doc.signers
-		.filter((s) => s.id !== signerId)
+		.filter((s) => s.key !== signerKey)
 		.map((s, idx) => ({ ...s, order: idx + 1 }));
 }
 
