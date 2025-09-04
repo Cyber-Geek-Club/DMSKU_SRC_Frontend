@@ -1,261 +1,236 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
 
-	// Types now based on backend shape (can be moved to a shared types file later)
-	type ProjectStatus = 'draft' | 'active' | 'archived';
-	type SignerStatus = 'signed' | 'pending' | 'rejected';
-	type Status = 'signed' | 'pending' | 'rejected';
+	// Accept flexible project shapes from backend
+	const props = $props<{ project?: any }>();
 
-	interface FileSummary {
-		totalFiles: number;
-		totalSigners: number;
-		signaturesCompleted: number;
-	}
-	interface File {
-		id: number;
-		projectsId: number;
-		fileName: string;
-		description: string;
-		updated_at: number | string | null;
-		created_at: number | string;
-		deleted_at: number | string | null;
-	}
-	interface Signer {
-		id: number;
-		projectFileId: number;
-		signerUserId: number;
-		position: number;
-		name: string;
-		email: string;
-		signatureStatus: SignerStatus;
-		signedAt: string | number;
-	}
-	interface Project {
-		id: number;
-		projectsName: string;
-		ownerUserId: number;
-		type: 'uploaded' | 'generated';
-		status: ProjectStatus;
-		projectCode?: string;
-		updated_at: number | string | null;
-		created_at: number | string;
-		deleted_at: number | string | null;
-		files: File[];
-		signers: Signer[];
-		summary: FileSummary;
-	}
-
-	// Props (runes mode)
-	const props = $props<{ project: Project | undefined }>();
-
-	let orderedSigners = $state<Signer[]>([]);
-	let signed = $state<Signer[]>([]);
-	let pending = $state<Signer[]>([]);
-	let rejected = $state<Signer[]>([]);
+	let orderedSigners = $state<any[]>([]);
+	let filesById = $state<Record<number, any>>({});
 	let overallStatus = $state<'success' | 'process' | 'wait' | 'decline'>('wait');
-	let select_category = $state<{ label: string; count: number }[]>([]);
-	let pendingFiles = $state<
-		{
-			file: File;
-			pending: Signer[];
-			rejected: Signer[];
-			completed: boolean;
-		}[]
-	>([]);
+	let progress = $state<number>(0);
 
 	$effect(() => {
 		const p = props.project;
 		if (!p) {
 			orderedSigners = [];
-			signed = [];
-			pending = [];
-			rejected = [];
+			filesById = {};
 			overallStatus = 'wait';
-			select_category = [
-				{ label: m.document_send(), count: 0 },
-				{ label: m.document_wait(), count: 0 },
-				{ label: m.document_process(), count: 0 },
-				{ label: m.document_success(), count: 0 }
-			];
+			progress = 0;
 			return;
 		}
 
-		const ordered =
-			p.signers?.slice().sort((a: Signer, b: Signer) => a.position - b.position) ?? [];
-		const signedLocal = ordered.filter((s: Signer) => s.signatureStatus === 'signed');
-		const pendingLocal = ordered.filter((s: Signer) => s.signatureStatus === 'pending');
-		const rejectedLocal = ordered.filter((s: Signer) => s.signatureStatus === 'rejected');
+		// normalize signers locally to avoid reading/writing the same reactive variable inside the effect
+		const signers = (p.signers ?? [])
+			.slice()
+			.sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0));
+		const normalized = signers.map((s: any) => ({
+			...s,
+			name: s.name ?? s.userName ?? s.user_name ?? '',
+			email: s.email ?? s.userEmail ?? s.user_email ?? '',
+			projectFileId: s.projectFileId ?? s.project_file_id ?? s.projectFileId
+		}));
 
-		let overall: typeof overallStatus = 'wait';
-		if (rejectedLocal.length > 0) overall = 'decline';
-		else if (
-			p.summary &&
-			p.summary.signaturesCompleted === p.summary.totalSigners &&
-			p.summary.totalSigners > 0
-		)
-			overall = 'success';
-		else if (signedLocal.length > 0) overall = 'process';
-
-		orderedSigners = ordered;
-		signed = signedLocal;
-		pending = pendingLocal;
-		rejected = rejectedLocal;
-		overallStatus = overall;
-		select_category = [
-			{ label: m.document_send(), count: p.summary?.totalSigners ?? 0 },
-			{ label: m.document_wait(), count: pendingLocal.length },
-			{ label: m.document_process(), count: signedLocal.length },
-			{
-				label: m.document_success(),
-				count:
-					p.summary?.signaturesCompleted === p.summary?.totalSigners &&
-					(p.summary?.totalSigners ?? 0) > 0
-						? 1
-						: 0
-			}
-		];
-
-		// Build per-file pending list (only include files that are NOT fully signed)
-		const byFile: Record<number, { file: File; signers: Signer[] }> = {};
+		// build files map locally
+		const map: Record<number, any> = {};
 		for (const f of p.files ?? []) {
-			byFile[f.id] = { file: f, signers: [] };
+			map[f.id] = f;
 		}
-		for (const s of ordered) {
-			if (byFile[s.projectFileId]) byFile[s.projectFileId].signers.push(s);
-		}
-		pendingFiles = Object.values(byFile)
-			.map(({ file, signers }) => {
-				const pend = signers.filter((s) => s.signatureStatus === 'pending');
-				const rej = signers.filter((s) => s.signatureStatus === 'rejected');
-				const completed =
-					pend.length === 0 &&
-					rej.length === 0 &&
-					signers.length > 0 &&
-					signers.every((s) => s.signatureStatus === 'signed');
-				return { file, pending: pend, rejected: rej, completed };
-			})
-			.filter((g) => !g.completed);
+
+		// compute status/progress from normalized signers (do not read orderedSigners here)
+		const signedLocal = normalized.filter((s: any) => s.signatureStatus === 'signed');
+		const pendingLocal = normalized.filter((s: any) => s.signatureStatus === 'pending');
+		const rejectedLocal = normalized.filter((s: any) => s.signatureStatus === 'rejected');
+
+		let newOverall: typeof overallStatus = 'wait';
+		if (rejectedLocal.length > 0) newOverall = 'decline';
+		else if (
+			(p.summary?.signaturesCompleted ?? 0) === (p.summary?.totalSigners ?? 0) &&
+			(p.summary?.totalSigners ?? 0) > 0
+		)
+			newOverall = 'success';
+		else if (signedLocal.length > 0) newOverall = 'process';
+
+		const total = p.summary?.totalSigners ?? normalized.length ?? 0;
+		const done = p.summary?.signaturesCompleted ?? signedLocal.length ?? 0;
+		const newProgress = total > 0 ? Math.round((done / total) * 100) : 0;
+
+		// assign reactive state only once at the end
+		orderedSigners = normalized;
+		filesById = map;
+		overallStatus = newOverall;
+		progress = newProgress;
 	});
 
-	function signerClasses(status: SignerStatus) {
+	function statusBadge(status: string) {
 		switch (status) {
 			case 'signed':
-				return { dot: 'bg-green-600', text: 'text-green-600', extra: '' };
+				return 'bg-green-100 text-green-700';
 			case 'pending':
-				return { dot: 'border-2 border-green-600 bg-white', text: 'text-gray-700', extra: '' };
+				return 'bg-yellow-100 text-yellow-700';
 			case 'rejected':
-				return { dot: 'bg-red-600', text: 'text-red-600', extra: 'line-through' };
+				return 'bg-red-100 text-red-700';
+			case 'draft':
+				return 'bg-gray-100 text-gray-700';
+			case 'active':
+				return 'bg-blue-100 text-blue-700';
+			case 'archived':
+				return 'bg-gray-200 text-gray-700';
+			default:
+				return 'bg-gray-100 text-gray-700';
 		}
 	}
 
-	function overallStatusLabel() {
-		switch (overallStatus) {
-			case 'success':
-				return m.document_success();
-			case 'process':
-				return m.document_process();
-			case 'wait':
-				return m.document_wait();
-			case 'decline':
-				return m.decline();
-		}
+	function getProjectName(p: any) {
+		return p?.projectName ?? p?.projectsName ?? p?.project_name ?? '';
 	}
 
-	function overallStatusColor() {
-		switch (overallStatus) {
-			case 'success':
-				return 'text-green-500';
-			case 'process':
-				return 'text-blue-500';
-			case 'wait':
-				return 'text-gray-500';
-			case 'decline':
-				return 'text-red-500';
+	function formatDate(d: string | number | null | undefined) {
+		if (!d) return '-';
+		try {
+			return new Date(d).toLocaleString();
+		} catch (e) {
+			return String(d);
 		}
 	}
 </script>
 
 {#if props.project}
-	<div class="px-30 py-10">
-		<div class="mb-6 flex justify-evenly border-b font-medium text-gray-600">
-			{#each select_category as item}
-				<div class="cursor-default border-b-2 border-transparent pb-2">
-					<span>{item.label}</span>
-					<span class="ml-1 rounded-full bg-gray-200 px-2 text-xs font-semibold text-gray-700"
-						>{item.count}</span
-					>
+	<div class="mx-auto max-w-4xl p-6">
+		<!-- Header / Tracking card -->
+		<div class="mb-6 rounded-lg bg-white p-6 shadow-md">
+			<div class="flex flex-col items-start justify-between md:flex-row md:items-center">
+				<div>
+					<h2 class="text-xl font-semibold">{getProjectName(props.project)}</h2>
+					<p class="text-sm text-gray-500">
+						{m.document_number()}:
+						<strong class="ml-1"
+							>{props.project.projectNumber ??
+								props.project.projectCode ??
+								props.project.projectCode ??
+								props.project.id}</strong
+						>
+					</p>
+					<p class="text-sm text-gray-500">
+						{m.document_name()}:
+						<strong class="ml-1"
+							>{props.project.projectName ?? props.project.projectsName ?? '-'}</strong
+						>
+					</p>
 				</div>
-			{/each}
-		</div>
+				<div class="mt-3 text-right md:mt-0">
+					<div
+						class="mb-2 inline-flex items-center rounded px-3 py-1 text-sm font-medium {statusBadge(
+							props.project.status ?? props.project.state ?? 'draft'
+						)}"
+					>
+						{props.project.status ?? props.project.state ?? 'draft'}
+					</div>
+					<div class="text-xs text-gray-500">
+						Created: {formatDate(props.project.created_at ?? props.project.createdAt)}
+					</div>
+				</div>
+			</div>
 
-		<div class="rounded-lg bg-gray-50 p-6 shadow-md">
-			<p class="mb-2">
-				<strong>{m.document_number()} :</strong>
-				{props.project.projectCode ?? props.project.id}
-			</p>
-			<p class="mb-2"><strong>{m.document_name()} :</strong> {props.project.projectsName}</p>
-			<p class="mb-6 font-semibold {overallStatusColor()}">{m.status()} : {overallStatusLabel()}</p>
-
-			{#if orderedSigners.length === 0}
-				<p class="text-center text-gray-400 italic">{m.document_notfound()}</p>
-			{:else}
-				{#each orderedSigners as signer, i (signer.id)}
-					{@const cls = signerClasses(signer.signatureStatus)}
-					<div class="relative flex flex-row items-center justify-start py-3">
-						<div class="mx-5 h-4 w-4 rounded-full {cls.dot}"></div>
-						<div>
-							<p class="text-sm text-gray-500">Step {i + 1}</p>
-							<p class="font-medium {cls.text} {cls.extra}">
-								{signer.name} —
-								{signer.signatureStatus === 'signed'
-									? m.document_success()
-									: signer.signatureStatus === 'pending'
-										? m.document_wait()
-										: m.decline()}
-							</p>
+			<div class="mt-4">
+				<div class="flex items-center justify-between">
+					<div>
+						<div class="text-sm text-gray-500">Tracking Code</div>
+						<div class="text-2xl font-bold">
+							{props.project.projectCode ?? props.project.projectNumber ?? props.project.id}
 						</div>
 					</div>
-				{/each}
-			{/if}
+					<div class="w-full md:w-2/5">
+						<div class="mb-1 text-sm text-gray-500">Progress</div>
+						<div class="h-3 w-full overflow-hidden rounded bg-gray-100">
+							<div class="h-3 rounded bg-green-500" style="width: {progress}%"></div>
+						</div>
+						<div class="mt-1 text-xs text-gray-500">
+							{progress}% — {props.project.summary?.signaturesCompleted ?? 0}/{props.project.summary
+								?.totalSigners ?? 0} signatures
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 
-		{#if pendingFiles.length > 0}
-			<div class="mt-8 rounded-lg bg-white p-6 shadow">
-				<h3 class="mb-4 text-lg font-semibold text-gray-700">
-					เอกสารที่ยังไม่สมบูรณ์ / Pending Documents
-				</h3>
-				{#each pendingFiles as group (group.file.id)}
-					<div class="mb-5 rounded border border-gray-200 p-4">
-						<div class="mb-2 flex items-center justify-between">
-							<p class="font-medium text-gray-800">{group.file.fileName}</p>
-							<span class="text-xs text-gray-500">
-								{group.pending.length} pending{group.rejected.length
-									? ` · ${group.rejected.length} rejected`
-									: ''}
-							</span>
-						</div>
-						{#if group.rejected.length > 0}
-							<div class="mb-2 rounded bg-red-50 p-2 text-xs text-red-600">
-								ปฏิเสธ: {group.rejected.map((r) => r.name).join(', ')}
+		<!-- Timeline / Signers -->
+		<div class="mb-6 rounded-lg bg-white p-6 shadow-md">
+			<h3 class="mb-4 text-lg font-semibold">Tracking steps</h3>
+			<div class="space-y-4">
+				{#each orderedSigners as s, i (s.id)}
+					<div class="flex flex-col items-start space-y-3 md:flex-row md:space-y-0 md:space-x-4">
+						<div class="flex items-center md:flex-col">
+							<div
+								class="flex h-8 w-8 items-center justify-center rounded-full {s.signatureStatus ===
+								'signed'
+									? 'bg-green-500 text-white'
+									: s.signatureStatus === 'rejected'
+										? 'bg-red-500 text-white'
+										: 'border-2 border-gray-300 text-gray-700'}"
+							>
+								{i + 1}
 							</div>
-						{/if}
-						{#if group.pending.length > 0}
-							<ul class="space-y-1">
-								{#each group.pending as ps (ps.id)}
-									<li class="flex items-center text-sm text-gray-600">
-										<span class="mr-2 inline-block h-2 w-2 rounded-full border-2 border-green-600"
-										></span>
-										<span>{ps.position}. {ps.name} ({ps.email})</span>
-									</li>
-								{/each}
-							</ul>
-						{:else}
-							<p class="text-xs text-gray-400 italic">No pending signers</p>
-						{/if}
+							{#if i < orderedSigners.length - 1}
+								<div class="mt-2 hidden h-full w-px flex-1 bg-gray-200 md:block"></div>
+							{/if}
+						</div>
+						<div class="flex-1">
+							<div class="flex flex-col justify-between md:flex-row md:items-center">
+								<div class="break-words">
+									<div
+										class="font-medium {s.signatureStatus === 'signed'
+											? 'text-green-600'
+											: s.signatureStatus === 'rejected'
+												? 'text-red-600'
+												: 'text-gray-700'}"
+									>
+										{s.name ?? s.userName}
+									</div>
+									<div class="text-xs text-gray-500">
+										{s.email ?? s.userEmail} — {filesById[s.projectFileId]?.fileName ??
+											filesById[s.projectFileId]?.file_name ??
+											'-'}
+									</div>
+								</div>
+								<div class="mt-2 text-sm md:mt-0">
+									<span
+										class="rounded px-2 py-1 text-xs font-semibold {statusBadge(s.signatureStatus)}"
+										>{s.signatureStatus}</span
+									>
+								</div>
+							</div>
+						</div>
 					</div>
 				{/each}
 			</div>
-		{/if}
+		</div>
+
+		<!-- Files list -->
+		<div class="rounded-lg bg-white p-6 shadow-md">
+			<h3 class="mb-4 text-lg font-semibold">Files ({(props.project.files ?? []).length})</h3>
+			<div class="space-y-3">
+				{#each props.project.files ?? [] as f (f.id)}
+					<div class="flex items-center justify-between rounded border p-3">
+						<div>
+							<div class="font-medium">{f.fileName ?? f.file_name}</div>
+							<div class="text-xs text-gray-500">
+								{f.description ?? f.contentType ?? ''} • {formatDate(f.created_at ?? f.createdAt)}
+							</div>
+						</div>
+						<div class="text-right">
+							<div class="text-sm text-gray-500">Signers:</div>
+							<div class="mt-1 flex items-center space-x-2">
+								{#each (props.project.signers ?? []).filter((s: any) => s.projectFileId === f.id || s.project_file_id === f.id) as sf (sf.id)}
+									<span class="rounded px-2 py-1 text-xs {statusBadge(sf.signatureStatus)}"
+										>{sf.name ?? sf.userName} · {sf.signatureStatus}</span
+									>
+								{/each}
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
 	</div>
 {:else}
 	<p class="text-center text-gray-400">{m.document_notfound()}</p>
