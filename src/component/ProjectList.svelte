@@ -5,58 +5,9 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 
-	// ProjectStatus (raw) may come from backend but UI filtering now derives status from signers.
-	// Raw project status (not currently driving UI logic)
-	type ProjectStatus = 'draft' | 'active' | 'archived';
-	// SignerStatus from backend
-	type SignerStatus = 'signed' | 'pending' | 'rejected';
-	// Unified status used in UI (currently same literal union)
-	type Status = 'signed' | 'pending' | 'rejected';
-	type StatusView = { label: string; pillCls: string; dotCls: string };
+	import type { ProjectWithRelations, signatureStatus } from '../types/project-types';
 
-	interface FileSummary {
-		totalFiles: number;
-		totalSigners: number;
-		signaturesCompleted: number;
-	}
-
-	interface File {
-		id: number;
-		projectsId: number;
-		fileName: string;
-		description: string;
-		updated_at: number | string | null;
-		created_at: number | string;
-		deleted_at: number | string | null;
-	}
-
-	interface Signer {
-		id: number;
-		projectFileId: number;
-		signerUserId: number;
-		position: number;
-		name: string;
-		email: string;
-		signatureStatus: SignerStatus;
-		signedAt: string | number;
-	}
-
-	interface Project {
-		id: number;
-		projectsName: string;
-		ownerUserId: number;
-		type: 'uploaded' | 'generated';
-		status: ProjectStatus;
-		projectCode?: string;
-		updated_at: number | string | null;
-		created_at: number | string;
-		deleted_at: number | string | null;
-		files: File[];
-		signers: Signer[];
-		summary: FileSummary;
-	}
-
-	let active = $state<'all' | SignerStatus>('all');
+	let active = $state<'all' | signatureStatus['status']>('all');
 
 	let showAddMenu = $state(false);
 	let addMenuEl: HTMLElement | null = null;
@@ -103,12 +54,11 @@
 		}
 	});
 
-	let { searchText, projects = [] as Project[] } = $props();
+	let { searchText, projects = [] as ProjectWithRelations[] } = $props();
 
 	const allProjects = $derived(Array.isArray(projects) ? projects : []);
 
-	function deriveProjectStatus(p: Project): SignerStatus {
-		// Rule: any rejected -> rejected; else all signed -> signed; else pending
+	function deriveProjectStatus(p: ProjectWithRelations): signatureStatus['status'] {
 		const signers = p.signers || [];
 		if (!signers.length) return 'pending';
 		if (signers.some((s) => s.signatureStatus === 'rejected')) return 'rejected';
@@ -135,11 +85,12 @@
 		})()
 	);
 
-	function projectMatches(p: Project, tokens: string[]): boolean {
+	function projectMatches(p: ProjectWithRelations, tokens: string[]): boolean {
 		if (!tokens.length) return true;
-		const parts: string[] = [String(p.id), p.projectsName.toLowerCase()];
-		for (const f of p.files || []) parts.push(f.fileName.toLowerCase());
-		for (const s of p.signers || []) parts.push(s.name.toLowerCase(), s.email.toLowerCase());
+		const parts: string[] = [String(p.id), p.projectName?.toLowerCase() ?? ''];
+		for (const f of p.files || []) parts.push(f.fileName?.toLowerCase() ?? '');
+		for (const s of p.signers || [])
+			parts.push(s.userName?.toLowerCase() ?? '', s.userEmail?.toLowerCase() ?? '');
 		const haystack = parts.join(' ');
 		return tokens.every((t) => haystack.includes(t));
 	}
@@ -166,13 +117,19 @@
 
 	const filteredSorted = $derived(
 		[...filtered].sort((a, b) => {
-			const diff = toEpoch(b.created_at) - toEpoch(a.created_at);
+			const diff = toEpoch(b.createdAt) - toEpoch(a.createdAt);
 			if (diff !== 0) return diff;
 			return Number(b.id) - Number(a.id);
 		})
 	);
 
-	const STATUS_MAP: Record<Status, StatusView> = {
+	type StatusType = 'pending' | 'signed' | 'rejected';
+	type StatusView = {
+		label: string;
+		pillCls: string;
+		dotCls: string;
+	};
+	const STATUS_MAP: Record<StatusType, StatusView> = {
 		signed: {
 			label: m.filter_status_confirmed(),
 			pillCls: 'status-pill status-ok',
@@ -190,7 +147,7 @@
 		}
 	};
 
-	const getStatus = (s: Status): StatusView => STATUS_MAP[s] ?? STATUS_MAP.pending;
+	const getStatus = (s: StatusType): StatusView => STATUS_MAP[s] ?? STATUS_MAP.pending;
 
 	function formatDateTH(value: number | string): string {
 		// Accept: epoch seconds, epoch ms, ISO string
@@ -214,20 +171,18 @@
 	let showQR = $state(false);
 	let qrLoading = $state(false);
 	let qrError = $state<string | null>(null);
-	let currentQRProject = $state<Project | null>(null);
+	let currentQRProject = $state<ProjectWithRelations | null>(null);
 	let qrDataUrl = $state<string | null>(null);
 
-	async function openQR(p: Project) {
+	async function openQR(p: ProjectWithRelations) {
 		showQR = true;
 		qrLoading = true;
 		qrError = null;
 		currentQRProject = p;
 		qrDataUrl = null;
 		try {
-			// fetch data-url JSON (default)
 			const { project } = await import('$lib/api/project');
 			const res = await project.getQRCode(p.id, { format: 'data-url', scale: 6 });
-			// response.data may contain either buffer or json depending on format; we requested json
 			qrDataUrl = res.data?.qr || null;
 			if (!qrDataUrl) qrError = 'ไม่พบข้อมูล QR';
 		} catch (e) {
@@ -244,12 +199,12 @@
 		currentQRProject = null;
 	}
 
-	function goToSearch(p: Project) {
+	function goToSearch(p: ProjectWithRelations) {
 		const code = p.projectCode ? encodeURIComponent(p.projectCode) : '';
 		goto(`/searchDocument${code ? `?code=${code}` : ''}`);
 	}
 
-	async function downloadPNG(p: Project | null) {
+	async function downloadPNG(p: ProjectWithRelations | null) {
 		if (!p) return;
 		try {
 			const { project } = await import('$lib/api/project');
@@ -357,9 +312,12 @@
 				{#each [...filteredSorted] as p (p.id)}
 					<div class="project-item">
 						<div class="col id">{p.id}</div>
-
-						<div class="col name">{p.projectsName}</div>
-
+						<div class="col name">
+							{p.projectName}
+							{#if p.status === 'draft'}
+								<span class="badge-draft">Draft</span>
+							{/if}
+						</div>
 						<div class="col">
 							{#key p.signers}
 								<span class={getStatus(deriveProjectStatus(p)).pillCls}>
@@ -368,25 +326,31 @@
 								</span>
 							{/key}
 						</div>
-
-						<div class="col date">{formatDateTH(p.created_at)}</div>
-
+						<div class="col date">{formatDateTH(p.createdAt)}</div>
 						<div class="col actions">
-							<button class="action-btn" title="ดูรายละเอียด" onclick={() => goToSearch(p)}>
+							<button
+								class="action-btn cursor-pointer"
+								title="ดูรายละเอียด"
+								onclick={() => goToSearch(p)}
+							>
 								<Icon icon="tabler:eye" class="h-5 w-5" />
 							</button>
-							<button class="action-btn" title="QR Code" onclick={() => openQR(p)}>
+							<button class="action-btn cursor-pointer" title="QR Code" onclick={() => openQR(p)}>
 								<Icon icon="tabler:qrcode" class="h-5 w-5" />
 							</button>
-							<button class="action-btn" title="แก้ไข">
+							<button
+								class="action-btn cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+								title="แก้ไข"
+								disabled={p.status === 'active'}
+							>
 								<Icon
 									icon="tabler:pencil"
 									class="h-5 w-5"
 									onclick={() => goto(`/main/upload?edit=${p.id}`)}
 								/>
 							</button>
-							<button class="action-btn" title="ลบ">
-								<Icon icon="tabler:trash" class="h-5 w-5" />
+							<button class="action-btn cursor-pointer hover:text-red-500!" title="ลบ">
+								<Icon icon="tabler:trash" class="h-5 w-5 " />
 							</button>
 						</div>
 					</div>
@@ -431,6 +395,17 @@
 	{/if}
 
 	<style>
+		.badge-draft {
+			display: inline-block;
+			margin-left: 0.5em;
+			padding: 2px 8px;
+			font-size: 0.75em;
+			background: #f5c542;
+			color: #222;
+			border-radius: 8px;
+			font-weight: 600;
+			vertical-align: middle;
+		}
 		.qr-modal-backdrop {
 			position: fixed;
 			inset: 0;

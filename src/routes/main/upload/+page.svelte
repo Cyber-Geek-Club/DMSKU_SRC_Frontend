@@ -3,287 +3,391 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import Input from '$lib/uploadAssets/Input.svelte';
 	import { FileUp } from '@lucide/svelte';
-	import DocumentItem from '$lib/uploadAssets/DocumentItem.svelte';
+	import UploadFileList from '$lib/uploadAssets/UploadFileList.svelte';
 	import PreviewModal from '$lib/uploadAssets/PreviewModal.svelte';
-	import {
-		addFiles,
-		type DocItem,
-		ensurePreviewUrl,
-		releasePreviewUrl,
-		addSigner,
-		updateSigner,
-		removeSigner,
-		reorderSigners
-	} from '$lib/api/document';
 	import { project } from '$lib/api/project';
 	import { projectFile } from '$lib/api/projectFile';
 	import { user } from '$lib/api/user';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-
-	let inputRef: HTMLInputElement | null = null;
-
+	import type { UserType } from '../../../types/user-types';
+	import toast, { Toaster } from 'svelte-french-toast';
 	let projectName = $state('');
 	let projectNumber = $state('');
-	let saving = $state(false);
-	let projectId = $state<number | null>(null);
-	let currentStatus: 'draft' | 'active' | null = null;
+	let allUsers: Array<UserType> = $state([]);
+	let inputRef: HTMLInputElement | null = $state(null);
+	let isUploading = $state(false);
+	let isSaving = $state(false);
+	let uploadFiles = $state<
+		Array<{
+			// file may be absent for existing files until preview/download
+			file?: File | null;
+			fileId?: number;
+			fileName?: string;
+			fileType?: string;
+			signers: Array<{ key: string; name: string }>;
+			progress?: number;
+			status?: 'pending' | 'uploading' | 'done' | 'error';
+			error?: string;
+			isExisting?: boolean;
+		}>
+	>([]);
+	let previewFileIdx = $state<number | null>(null);
+	let previewUrl = $state<string | null>(null);
 
 	onMount(async () => {
-		try {
-			const allRes = await user.getAllUsers();
-			const arr = (allRes.data?.data ?? allRes.data ?? []) as any[];
-			allUsers = arr
-				.map((u) => ({
-					id: u.id ?? u.userId ?? u.uid ?? null,
-					name: u.name ?? u.fullName ?? u.displayName ?? '',
-					email: u.email ?? ''
-				}))
-				.filter((u) => u.name && u.email);
-			console.log('all users', allUsers);
-		} catch (e) {
-			console.warn('โหลดรายชื่อผู้ใช้ทั้งหมดไม่สำเร็จ', e);
-		}
-
-		const params = page?.url?.searchParams ?? new URLSearchParams(window.location.search);
-		const editIdStr = params.get('edit');
-		if (!editIdStr) return;
-		const id = Number(editIdStr);
-		if (!id || Number.isNaN(id)) return;
-		try {
-			const res = await project.getById(id);
-			const data = res.data;
-			if (!data) return;
-			if (data.status !== 'draft') {
-				alert('แก้ไขได้เฉพาะโครงการสถานะ draft');
-				return;
-			}
-			projectId = data.id;
-			currentStatus = data.status;
-			projectName = data.projectsName || '';
-			const fileArray = Array.isArray(data.files) ? data.files : [];
-			const signerArray = Array.isArray(data.signers) ? data.signers : [];
-			const fileIdToSigners: Record<number, typeof signerArray> = {};
-			for (const s of signerArray) {
-				if (!fileIdToSigners[s.projectFileId]) fileIdToSigners[s.projectFileId] = [];
-				fileIdToSigners[s.projectFileId].push(s);
-			}
-			documents = fileArray.map((f: any, idx: number) => ({
-				id: `existing-${f.id}`,
-				name: f.fileName || f.description || `File-${f.id}`,
-				file: null,
-				progress: 100,
-				status: 'done',
-				previewUrl: undefined,
-				projectFileId: f.id,
-				signers: (fileIdToSigners[f.id] || []).map((s: any, si: number) => ({
-					key: `loaded-${f.id}-${s.userId ?? s.uid ?? s.id ?? si}`,
-					userId: s.userId ?? s.uid ?? s.id ?? null,
-					name: s.name || '',
-					email: s.email || '',
-					order: s.position ?? si + 1
-				}))
-			}));
-			documents = [...documents];
-		} catch (e) {
-			console.error('โหลดโปรเจ็กต์ไม่สำเร็จ', e);
-			alert('ไม่สามารถโหลดโปรเจ็กต์สำหรับแก้ไข');
+		const { data } = await user.getAllUsers();
+		if (data) {
+			allUsers = data;
 		}
 	});
 
-	async function upsertProject(targetStatus: 'draft' | 'active') {
-		if (saving) return;
-		if (!projectName.trim()) {
-			alert('กรุณากรอกชื่อโครงการ');
-			return;
-		}
-		if (targetStatus === 'active' && documents.length === 0) {
-			if (!confirm('ยังไม่มีไฟล์ แน่ใจหรือไม่ที่จะสร้างโครงการ (Active)?')) return;
-		}
-		saving = true;
-		try {
-			if (!projectId) {
-				const createRes =
-					targetStatus === 'active'
-						? await project.createActive(projectName.trim())
-						: await project.createDraft(projectName.trim());
-				projectId =
-					createRes.data?.id ?? createRes.data?.projectsId ?? createRes.data?.projectId ?? null;
-				currentStatus = targetStatus;
-				if (!projectId) throw new Error('Project id not returned');
-			} else if (currentStatus !== targetStatus) {
-				try {
-					await project.updateStatus(projectId, targetStatus);
-					currentStatus = targetStatus;
-				} catch (e) {
-					console.warn('อัปเดตสถานะไม่สำเร็จ', e);
-				}
+	onMount(async () => {
+		if (page.url.search.includes('edit')) {
+			const { data } = await project.getById(Number(page.url.search.split('=')[1]));
+			console.log(data);
+			if (data) {
+				projectName = data.projectName;
+				projectNumber = data.projectNumber;
 			}
-
-			for (const doc of documents) {
-				if (!doc.file) continue;
-				if (doc.status === 'done') continue;
-				try {
-					doc.status = 'uploading';
-					doc.progress = 0;
-					documents = [...documents];
-					const uploadRes = await projectFile.uploadProjectFile(
-						projectId,
-						doc.file,
-						doc.name,
-						(percent) => {
-							doc.progress = percent;
-							documents = [...documents];
-						}
-					);
-					const projectFileId =
-						uploadRes.data?.id ?? uploadRes.data?.projectFileId ?? uploadRes.data?.fileId;
-					if (projectFileId) {
-						for (const signer of doc.signers.sort((a, b) => a.order - b.order)) {
-							if (!signer.userId) continue; // must choose a user
-							try {
-								await projectFile.createFileSigner(projectFileId, signer.userId, signer.order);
-								await projectFile.createFileSignature(projectFileId, signer.userId);
-							} catch (e) {
-								console.error('สร้าง signer/signature ล้มเหลว', signer, e);
-							}
-						}
+			if (data?.files) {
+				for (let i = 0; i < data?.files.length; i++) {
+					let fileSigners: Array<{ key: string; name: string }> = [];
+					if (Array.isArray(data.signers) && data.signers.length) {
+						fileSigners = data.signers
+							.filter((s: any) => s.projectFileId === data.files[i].id)
+							.sort((a: any, b: any) => Number(a.position ?? 0) - Number(b.position ?? 0))
+							.map((s: any) => ({
+								key: (s.id ?? Math.random()).toString(),
+								name: s.userName ?? s.user?.name ?? s.userName ?? ''
+							}));
+					} else if (Array.isArray(data.files[i].signers) && data.files[i].signers.length) {
+						fileSigners = data.files[i].signers.map((s: any) => ({
+							key: (s.id ?? Math.random()).toString(),
+							name: s.name ?? s.userName ?? ''
+						}));
 					}
-					doc.progress = 100;
-					doc.status = 'done';
-					documents = [...documents];
-				} catch (e) {
-					console.error('Upload file failed', e);
-					doc.status = 'error';
-					documents = [...documents];
+
+					uploadFiles.push({
+						file: undefined,
+						fileId: data.files[i].id,
+						fileName: data.files[i].fileName,
+						fileType: data.files[i].fileType,
+						signers: fileSigners,
+						progress: 0,
+						status: 'done',
+						isExisting: true
+					});
 				}
 			}
-			documents = [...documents];
-			alert(targetStatus === 'draft' ? 'บันทึกร่างเสร็จแล้ว' : 'สร้างโครงการ Active เสร็จแล้ว');
-			goto('/main');
-		} catch (e) {
-			console.error('Upsert project error', e);
-			alert('บันทึกไม่สำเร็จ');
-		} finally {
-			saving = false;
+		}
+	});
+
+	function handleFileSelect(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (input.files) {
+			const newFiles = Array.from(input.files).map((file) => ({
+				file,
+				signers: [],
+				progress: 0,
+				status: 'pending' as 'pending',
+				isExisting: false
+			}));
+			uploadFiles.push(...newFiles);
+			input.value = '';
 		}
 	}
 
-	let documents = $state<DocItem[]>([]);
-	let allUsers = $state<{ id: number | null; name: string; email: string }[]>([]);
-	let isUploading = $state(false);
-	let previewTarget = $state<DocItem | null>(null);
-	let previewUrl = $state<string | null>(null);
-	let expanded = $state<Record<string, boolean>>({});
-
-	function toggleExpand(docId: string) {
-		expanded[docId] = !expanded[docId];
-		expanded = { ...expanded };
+	function removeFile(idx: number) {
+		uploadFiles.splice(idx, 1);
 	}
 
-	function handleAddSigner(doc: DocItem) {
-		addSigner(doc, '', '');
-		documents = [...documents];
+	function addSigner(fileIdx: number) {
+		const signers = uploadFiles[fileIdx].signers;
+		signers.push({
+			key: Math.random().toString(36).slice(2),
+			name: ''
+		});
 	}
 
-	function handleUpdateSigner(
-		doc: DocItem,
-		signerKey: string,
-		field: 'name' | 'email',
-		value: string
+	function removeSigner(fileIdx: number, signerIdx: number) {
+		uploadFiles[fileIdx].signers.splice(signerIdx, 1);
+	}
+
+	function updateSigner(fileIdx: number, signerIdx: number, field: 'name', value: string) {
+		uploadFiles[fileIdx].signers[signerIdx][field] = value;
+	}
+
+	function moveSigner(fileIdx: number, signerIdx: number, dir: -1 | 1) {
+		const signers = uploadFiles[fileIdx].signers;
+		const newIdx = signerIdx + dir;
+		if (newIdx < 0 || newIdx >= signers.length) return;
+		const [moved] = signers.splice(signerIdx, 1);
+		signers.splice(newIdx, 0, moved);
+	}
+
+	async function previewFile(
+		fileObj: {
+			file?: File | null;
+			fileId?: number;
+			fileName?: string;
+			fileType?: string;
+			signers: Array<{ key: string; name: string }>;
+		},
+		idx: number
 	) {
-		// basic field update
-		updateSigner(doc, signerKey, { [field]: value });
-		// attempt to map to a backend user id if both name or email matches a user
-		const signer = doc.signers.find((s) => s.key === signerKey);
-		if (signer) {
-			const match = allUsers.find(
-				(u) =>
-					(!!signer.email && u.email.toLowerCase() === signer.email.toLowerCase()) ||
-					(!!signer.name && u.name.toLowerCase() === signer.name.toLowerCase())
-			);
-			if (match && match.id != null && match.id !== signer.userId) {
-				updateSigner(doc, signerKey, { userId: match.id });
-			}
+		if (previewUrl) {
+			URL.revokeObjectURL(previewUrl);
+			previewUrl = null;
+			previewFileIdx = null;
 		}
-		documents = [...documents];
-	}
 
-	function handleRemoveSigner(doc: DocItem, signerKey: string) {
-		removeSigner(doc, signerKey);
-		documents = [...documents];
-	}
-
-	function moveSigner(doc: DocItem, signerKey: string, direction: -1 | 1) {
-		const idx = doc.signers.findIndex((s) => s.key === signerKey);
-		if (idx === -1) return;
-		reorderSigners(doc, idx, idx + direction);
-		documents = [...documents];
-	}
-
-	function openPreview(doc: DocItem) {
-		if (doc.file) {
-			const url = ensurePreviewUrl(doc);
-			if (!url) return;
-			previewTarget = doc;
-			previewUrl = url;
+		if (fileObj.file) {
+			previewFileIdx = idx;
+			previewUrl = URL.createObjectURL(fileObj.file);
 			return;
 		}
-		if (doc.projectFileId) {
-			if (doc.previewUrl) {
-				previewTarget = doc;
-				previewUrl = doc.previewUrl;
+
+		if (fileObj.fileId) {
+			try {
+				const fileRes = await projectFile.downloadProjectFile(fileObj.fileId);
+				if (fileRes.status === 200) {
+					const fileBlob = fileRes.data;
+					// determine mime
+					const mime = fileObj.fileType
+						? fileObj.fileType
+						: (fileObj.fileName || '').toLowerCase().endsWith('.pdf')
+							? 'application/pdf'
+							: 'application/octet-stream';
+					const file = new File([fileBlob], fileObj.fileName ?? `file-${fileObj.fileId}`, {
+						type: mime
+					});
+					uploadFiles[idx].file = file;
+					uploadFiles = [...uploadFiles];
+					previewFileIdx = idx;
+					previewUrl = URL.createObjectURL(file);
+					return;
+				} else {
+					toast.error(`ไม่สามารถดาวน์โหลดไฟล์: ${fileObj.fileName ?? fileObj.fileId} ได้`);
+					return;
+				}
+			} catch (err) {
+				console.error(err);
+				toast.error(`เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์`);
 				return;
 			}
-			projectFile
-				.downloadProjectFile(doc.projectFileId)
-				.then((res) => {
-					const blob = res.data as Blob;
-					const url = URL.createObjectURL(blob);
-					doc.previewUrl = url;
-					previewTarget = doc;
-					previewUrl = url;
-					documents = [...documents];
-				})
-				.catch((err) => {
-					console.error('ดาวน์โหลดไฟล์ไม่สำเร็จ', err);
-					alert('ดาวน์โหลดไฟล์ไม่สำเร็จ');
-				});
 		}
+
+		toast.error('ไม่มีไฟล์ให้แสดง');
 	}
 
 	function closePreview() {
-		if (previewTarget) {
-			releasePreviewUrl(previewTarget);
-		}
-		previewTarget = null;
+		previewFileIdx = null;
+		if (previewUrl) URL.revokeObjectURL(previewUrl);
 		previewUrl = null;
 	}
 
-	function handleFileSelect(e: Event) {
-		const target = e.target as HTMLInputElement;
-		const files = target.files;
-		if (!files || files.length === 0) return;
-
-		documents = addFiles(documents, files);
-		target.value = '';
+	function checkIsEmpty() {
+		if (!projectName && !projectNumber) {
+			toast.error('กรุณากรอกชื่อโครงการและเลขที่โครงการ');
+			return true;
+		} else if (!uploadFiles.length) {
+			toast.error('กรุณาอัปโหลดไฟล์อย่างน้อย 1 ไฟล์');
+			return true;
+		} else if (uploadFiles.some((f) => f.signers.length === 0)) {
+			toast.error('กรุณาเพิ่มผู้ลงนามอย่างน้อย 1 คนในแต่ละไฟล์');
+			return true;
+		} else if (uploadFiles.some((f) => f.signers.some((s) => !s.name.trim()))) {
+			toast.error('กรุณากรอกชื่อผู้ลงนามให้ครบถ้วน');
+			return true;
+		}
+		return false;
 	}
 
-	async function removeDocument(id: string) {
-		const doc = documents.find((d) => d.id === id);
-		if (!doc) return;
-		if (doc.projectFileId) {
-			if (!confirm('ลบไฟล์นี้ออกจากระบบถาวร?')) return;
-			try {
-				await projectFile.deleteProjectFile(doc.projectFileId);
-			} catch (e) {
-				console.error('ลบไฟล์ backend ไม่สำเร็จ', e);
-				alert('ลบไฟล์ไม่สำเร็จ');
-				return;
-			}
+	async function saveDraft() {
+		isUploading = true;
+		if (checkIsEmpty()) {
+			isUploading = false;
+			return;
 		}
-		documents = documents.filter((d) => d.id !== id);
+		try {
+			const create_project_res = await project.createDraft(projectName, projectNumber);
+			if (create_project_res.status === 201) {
+				for (let idx = 0; idx < uploadFiles.length; idx++) {
+					const current = uploadFiles[idx];
+					if (current.isExisting && current.fileId) {
+						// file already exists on server — just create signers using fileId
+						for (let i = 0; i < current.signers.length; i++) {
+							const signerName = current.signers[i].name;
+							const user = allUsers.find((u) => u.name === signerName);
+							if (user) {
+								await projectFile
+									.createFileSigner(current.fileId, user.id, i + 1)
+									.then(async (signerRes) => {
+										if (signerRes.status === 201) {
+											await projectFile.createFileSignature(
+												signerRes.data.projectFileId,
+												signerRes.data.signerUserId
+											);
+										} else {
+											toast.error(`ไม่สามารถเพิ่มผู้ลงนาม: ${signerName} ได้`);
+										}
+									});
+							} else {
+								toast.error(`ไม่พบผู้ใช้: ${signerName}`);
+							}
+						}
+						current.status = 'done';
+						uploadFiles = [...uploadFiles];
+						continue;
+					}
+
+					// new file — ensure a File exists before uploading
+					if (!current.file) {
+						toast.error(`ไฟล์ "${current.fileName ?? 'unknown'}" ไม่มีข้อมูลสำหรับอัปโหลด`);
+						current.status = 'error';
+						uploadFiles = [...uploadFiles];
+						continue;
+					}
+
+					await projectFile
+						.uploadProjectFile(
+							create_project_res.data.id,
+							current.file,
+							current.file.type,
+							(progress: number) => {
+								uploadFiles[idx].progress = progress;
+								uploadFiles = [...uploadFiles];
+							}
+						)
+						.then(async (res) => {
+							if (res.status === 201) {
+								for (let i = 0; i < current.signers.length; i++) {
+									const signerName = current.signers[i].name;
+									const user = allUsers.find((u) => u.name === signerName);
+									if (user) {
+										await projectFile
+											.createFileSigner(res.data.id, user.id, i + 1)
+											.then(async (signerRes) => {
+												if (signerRes.status === 201) {
+													await projectFile.createFileSignature(
+														signerRes.data.projectFileId,
+														signerRes.data.signerUserId
+													);
+												} else {
+													toast.error(`ไม่สามารถเพิ่มผู้ลงนาม: ${signerName} ได้`);
+												}
+											});
+									} else {
+										toast.error(`ไม่พบผู้ใช้: ${signerName}`);
+									}
+								}
+							}
+						});
+					uploadFiles[idx].status = 'done';
+					uploadFiles = [...uploadFiles];
+				}
+			}
+		} catch (error) {
+			toast.error('เกิดข้อผิดพลาดในการบันทึกโครงร่าง');
+			console.error(error);
+		}
+		isUploading = false;
+		toast.success('บันทึกโครงร่างเรียบร้อย');
+	}
+
+	async function createProject() {
+		isUploading = true;
+		if (checkIsEmpty()) {
+			isUploading = false;
+			return;
+		}
+		try {
+			const create_project_res = await project.createActive(projectName, projectNumber);
+			if (create_project_res.status === 201) {
+				for (let idx = 0; idx < uploadFiles.length; idx++) {
+					const current = uploadFiles[idx];
+					if (current.isExisting && current.fileId) {
+						for (let i = 0; i < current.signers.length; i++) {
+							const signerName = current.signers[i].name;
+							const user = allUsers.find((u) => u.name === signerName);
+							if (user) {
+								await projectFile
+									.createFileSigner(current.fileId, user.id, i + 1)
+									.then(async (signerRes) => {
+										if (signerRes.status === 201) {
+											await projectFile.createFileSignature(
+												signerRes.data.projectFileId,
+												signerRes.data.signerUserId
+											);
+										} else {
+											toast.error(`ไม่สามารถเพิ่มผู้ลงนาม: ${signerName} ได้`);
+										}
+									});
+							} else {
+								toast.error(`ไม่พบผู้ใช้: ${signerName}`);
+							}
+						}
+						current.status = 'done';
+						uploadFiles = [...uploadFiles];
+						continue;
+					}
+
+					if (!current.file) {
+						toast.error(`ไฟล์ "${current.fileName ?? 'unknown'}" ไม่มีข้อมูลสำหรับอัปโหลด`);
+						current.status = 'error';
+						uploadFiles = [...uploadFiles];
+						continue;
+					}
+
+					await projectFile
+						.uploadProjectFile(
+							create_project_res.data.id,
+							current.file,
+							current.file.type,
+							(progress: number) => {
+								uploadFiles[idx].progress = progress;
+								uploadFiles = [...uploadFiles];
+							}
+						)
+						.then(async (res) => {
+							if (res.status === 201) {
+								for (let i = 0; i < current.signers.length; i++) {
+									const signerName = current.signers[i].name;
+									const user = allUsers.find((u) => u.name === signerName);
+									if (user) {
+										await projectFile
+											.createFileSigner(res.data.id, user.id, i + 1)
+											.then(async (signerRes) => {
+												if (signerRes.status === 201) {
+													await projectFile.createFileSignature(
+														signerRes.data.projectFileId,
+														signerRes.data.signerUserId
+													);
+												} else {
+													toast.error(`ไม่สามารถเพิ่มผู้ลงนาม: ${signerName} ได้`);
+												}
+											});
+									} else {
+										toast.error(`ไม่พบผู้ใช้: ${signerName}`);
+									}
+								}
+							}
+						});
+					uploadFiles[idx].status = 'done';
+					uploadFiles = [...uploadFiles];
+				}
+				toast.success('สร้างโครงการเรียบร้อย');
+				goto(`/main`);
+			} else {
+				toast.error('ไม่สามารถสร้างโครงการได้');
+			}
+		} catch (error) {
+			toast.error('เกิดข้อผิดพลาดในการสร้างโครงการ');
+			console.error(error);
+		}
+		isUploading = false;
 	}
 </script>
 
@@ -299,14 +403,18 @@
 		<div class="mt-4 flex self-end justify-self-end">
 			<button
 				class="rounded-2xl border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
-				onclick={() => upsertProject('draft')}
-				disabled={isUploading || saving}>{saving ? 'กำลังบันทึก...' : 'บันทึกโครงร่าง'}</button
+				onclick={saveDraft}
+				disabled={isUploading}
 			>
+				บันทึกโครงร่าง
+			</button>
 			<button
 				class="rounded-2xl bg-ku-dark-green px-4 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-				onclick={() => upsertProject('active')}
-				disabled={isUploading || saving}>สร้างโครงการ</button
+				onclick={createProject}
+				disabled={isUploading}
 			>
+				สร้างโครงการ
+			</button>
 		</div>
 	</div>
 	<div class="upload-list">
@@ -314,21 +422,17 @@
 			<h1>{m.upload_related_documents()}</h1>
 		</div>
 		<div class="list-content">
-			{#each documents as doc (doc.id)}
-				<DocumentItem
-					{doc}
-					{allUsers}
-					expanded={!!expanded[doc.id]}
-					{isUploading}
-					preview={({ doc }) => openPreview(doc)}
-					remove={({ doc }) => removeDocument(doc.id)}
-					toggle={({ doc }) => toggleExpand(doc.id)}
-					addsigner={({ doc }) => handleAddSigner(doc)}
-					updatesigner={({ doc, id, field, value }) => handleUpdateSigner(doc, id, field, value)}
-					removesigner={({ doc, id }) => handleRemoveSigner(doc, id)}
-					movesigner={({ doc, id, dir }) => moveSigner(doc, id, dir)}
-				/>
-			{/each}
+			<!-- สถานะการอัปโหลดแต่ละไฟล์ไปอยู่ใน UploadFileList -->
+			<UploadFileList
+				files={uploadFiles}
+				{allUsers}
+				onRemoveFile={removeFile}
+				onAddSigner={addSigner}
+				onRemoveSigner={removeSigner}
+				onUpdateSigner={updateSigner}
+				onMoveSigner={moveSigner}
+				onPreview={previewFile}
+			/>
 			<button class="upload-button" aria-label="Upload Documents" onclick={() => inputRef?.click()}>
 				<FileUp class="ml-2 inline-block" />
 				{m.upload_button()}
@@ -345,7 +449,18 @@
 	</div>
 </div>
 
-<PreviewModal doc={previewTarget} url={previewUrl} close={closePreview} />
+{#if previewFileIdx !== null && previewUrl}
+	<PreviewModal
+		doc={{
+			name:
+				uploadFiles[previewFileIdx].file?.name ?? uploadFiles[previewFileIdx].fileName ?? 'file',
+			file: uploadFiles[previewFileIdx].file ?? undefined
+		}}
+		url={previewUrl}
+		close={closePreview}
+	/>
+{/if}
+<Toaster position="top-right" />
 
 <style>
 	.upload-button {

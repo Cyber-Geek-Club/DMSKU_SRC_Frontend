@@ -1,18 +1,15 @@
 <script lang="ts">
-	import type { DocItem } from '$lib/api/document';
-
 	let {
 		doc = null,
 		url = null,
 		close = (() => {}) as () => void
 	} = $props<{
-		doc?: DocItem | null;
+		doc?: { name: string; file?: File } | null;
 		url?: string | null;
 		close?: () => void;
 	}>();
 
-	// Derive type even when doc.file is absent (backend downloaded blob stored via previewUrl only)
-	function inferKind(d: DocItem | null) {
+	function inferKind(d: { name: string; file?: File } | null) {
 		if (!d) return { isPdf: false, isImage: false };
 		const lower = d.name.toLowerCase();
 		const isPdf = lower.endsWith('.pdf') || d.file?.type === 'application/pdf';

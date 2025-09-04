@@ -10,10 +10,10 @@ export const project = {
 			params: { format: opts?.format, scale: opts?.scale },
 			responseType: opts?.format === 'png' ? 'arraybuffer' : 'json'
 		}),
-	createDraft: (projectsName: string) =>
-		http.post('/projects', { projectsName, type: 'uploaded', status: 'draft' }),
-	createActive: (projectsName: string) =>
-		http.post('/projects', { projectsName, type: 'uploaded', status: 'active' }),
+	createDraft: (projectsName: string, projectNumber: string) =>
+		http.post('/projects', { projectsName, projectNumber, type: 'uploaded', status: 'draft' }),
+	createActive: (projectsName: string, projectNumber: string) =>
+		http.post('/projects', { projectsName, projectNumber, type: 'uploaded', status: 'active' }),
 	updateStatus: (projectId: number, status: 'draft' | 'active') =>
 		http.put(`/projects/${projectId}`, { status })
 };
